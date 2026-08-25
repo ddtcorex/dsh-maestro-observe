@@ -42,14 +42,15 @@ export class ObserveStore {
   push(record: TraceRecord): Promise<void> {
     this.ring.unshift(record)
     if (this.ring.length > RING_CAP) this.ring.length = RING_CAP
-    // aggregate: day always (keyed by today for cost('day') without param), plus session if present
-    const dayAggKey = this.key({ scope: 'day', day: dayOf(Date.now()) })
+    // F01: day aggregate keyed by record.ts, not Date.now()
+    const dayAggKey = this.key({ scope: 'day', day: dayOf(record.ts) })
     this.aggregates.set(dayAggKey, addCost(this.aggregates.get(dayAggKey) ?? emptyCost(), record))
     if (record.sessionId) {
       const sessKey = this.key({ scope: 'session', sessionId: record.sessionId })
       this.aggregates.set(sessKey, addCost(this.aggregates.get(sessKey) ?? emptyCost(), record))
     }
     const line = JSON.stringify(record)
+    // F02: catch poison so chain always recovers
     this.queue = this.queue.then(async () => {
       const p = historyPath(this.dshHome)
       await mkdir(dirname(p), { recursive: true, mode: 0o700 })
@@ -64,7 +65,7 @@ export class ObserveStore {
         await writeFile(p, lines.join('\n') + '\n', { encoding: 'utf-8', mode: 0o600 })
       }
       await chmod(p, 0o600).catch(() => {})
-    })
+    }).catch(() => {})
     return this.queue.then(() => undefined)
   }
 
@@ -84,23 +85,27 @@ export class ObserveStore {
   }
 
   async load(): Promise<void> {
-    try {
-      const text = await readFile(historyPath(this.dshHome), 'utf-8')
-      const lines = text.split('\n').filter(Boolean)
-      for (const line of lines.slice(-RING_CAP)) {
-        try {
-          const r = JSON.parse(line) as TraceRecord
-          this.ring.unshift(r)
-          const dayAggKey = this.key({ scope: 'day', day: dayOf(Date.now()) })
-          this.aggregates.set(dayAggKey, addCost(this.aggregates.get(dayAggKey) ?? emptyCost(), r))
-          if (r.sessionId) {
-            const sessKey = this.key({ scope: 'session', sessionId: r.sessionId })
-            this.aggregates.set(sessKey, addCost(this.aggregates.get(sessKey) ?? emptyCost(), r))
-          }
-        } catch { /* skip malformed line */ }
-      }
-      this.ring.length = Math.min(this.ring.length, RING_CAP)
-    } catch { /* no history yet */ }
+    // F03: serialize whole load inside queue chain
+    this.queue = this.queue.then(async () => {
+      try {
+        const text = await readFile(historyPath(this.dshHome), 'utf-8')
+        const lines = text.split('\n').filter(Boolean)
+        for (const line of lines.slice(-RING_CAP)) {
+          try {
+            const r = JSON.parse(line) as TraceRecord
+            this.ring.unshift(r)
+            const dayAggKey = this.key({ scope: 'day', day: dayOf(r.ts) })
+            this.aggregates.set(dayAggKey, addCost(this.aggregates.get(dayAggKey) ?? emptyCost(), r))
+            if (r.sessionId) {
+              const sessKey = this.key({ scope: 'session', sessionId: r.sessionId })
+              this.aggregates.set(sessKey, addCost(this.aggregates.get(sessKey) ?? emptyCost(), r))
+            }
+          } catch { /* skip malformed line */ }
+        }
+        this.ring.length = Math.min(this.ring.length, RING_CAP)
+      } catch { /* no history yet */ }
+    }).catch(() => {})
+    await this.queue.catch(() => {})
   }
 
   async historyLines(): Promise<number> {
