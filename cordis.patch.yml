@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-maestro-observe
+      name: '@ddtcorex/dsh-maestro-observe'
