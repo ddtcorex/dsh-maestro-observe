@@ -84,4 +84,28 @@ describe('observe host plugin', () => {
     expect(bad.ok).toBe(false)
     expect(toolSchema).toBeTruthy()
   })
+
+  it('rpc cost session without sessionId fails closed', async () => {
+    const store = new ObserveStore(dir)
+    const { ctx, rpcHandlers } = fakeCtx()
+    const plugin = createObservePlugin(store)
+    await plugin.apply(ctx)
+    const res: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'cost', scope: 'session' })
+    expect(res.ok).toBe(false)
+    expect(res.error).toMatch(/sessionId/)
+    const res2: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'cost', scope: 'session', sessionId: '' })
+    expect(res2.ok).toBe(false)
+  })
+
+  it('tool cost session without sessionId fails closed', async () => {
+    const store = new ObserveStore(dir)
+    const { ctx } = fakeCtx()
+    const plugin = createObservePlugin(store)
+    await plugin.apply(ctx)
+    const res: any = await plugin.tool.execute({ op: 'cost', scope: 'session' })
+    expect(res.ok).toBe(false)
+    expect(res.error).toMatch(/sessionId/)
+    const res2: any = await plugin.tool.execute({ op: 'cost', scope: 'session', sessionId: '' })
+    expect(res2.ok).toBe(false)
+  })
 })

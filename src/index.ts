@@ -37,6 +37,7 @@ export function createObservePlugin(
       if (op === 'trace') return { ok: true, records: store.trace(input?.limit) }
       if (op === 'cost') {
         const scope = input?.scope ?? 'day'
+        if (scope === 'session' && !input?.sessionId) return { ok: false, error: 'sessionId required' }
         const cost = scope === 'session'
           ? store.cost('session', input?.sessionId ?? '')
           : store.cost('day')
@@ -91,6 +92,7 @@ export function createObservePlugin(
             if (method === 'trace') return { ok: true, records: store.trace(req?.limit) }
             if (method === 'cost') {
               const scope = req?.scope ?? 'day'
+              if (scope === 'session' && !req?.sessionId) return { ok: false, error: 'sessionId required' }
               return { ok: true, cost: scope === 'session' ? store.cost('session', req?.sessionId ?? '') : store.cost('day') }
             }
             if (method === 'health') return { ok: true, health: await buildHealthReport(ctx as any, { channels: CHANNELS, version: VERSION }) }
