@@ -29,6 +29,13 @@ describe('buildHealthReport', () => {
     const remote = h.channels.find(c => c.channel === '/maestro/remote')
     expect(remote!.ok).toBe(false)
     expect(remote!.error).toBeTruthy()
+    // failed channels are also degraded
+    expect(h.degraded.some(d => d.id === '/maestro/remote')).toBe(true)
+  })
+  it('exposes registry.degraded Map', async () => {
+    const degraded = new Map([['bad-plugin', { error: 'ERR_MODULE_NOT_FOUND' }]])
+    const h = await buildHealthReport(fakeCtx({ registry: { plugins: new Set(), degraded } }), { channels: ['/maestro/observe'], timeoutMs: 50, version: '0.1.0', now: 3000 })
+    expect(h.degraded.some(d => d.id === 'bad-plugin')).toBe(true)
   })
   it('survives missing rpc/registry/tools', async () => {
     const h = await buildHealthReport({ startedAt: 1, now: 2 } as any, { channels: CHANNELS, timeoutMs: 50, version: '0.1.0' })

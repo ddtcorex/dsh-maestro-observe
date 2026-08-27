@@ -4,6 +4,7 @@ export interface HealthReport {
   plugins: Array<{ id: string; name?: string }>
   toolCount: number
   channels: Array<{ channel: string; ok: boolean; error?: string }>
+  degraded: Array<{ id: string; error: string }>
   version: string
 }
 interface HealthDeps {
@@ -28,6 +29,16 @@ export async function buildHealthReport(deps: HealthDeps, opts: HealthOpts = {})
   } catch { /* registry shape unknown */ }
   let toolCount = 0
   try { toolCount = deps.tools?.list?.()?.length ?? 0 } catch { /* no tools */ }
+  // degraded: from registry.degraded Map or failed channels
+  const degraded: Array<{ id: string; error: string }> = []
+  try {
+    const deg = (deps as any).registry?.degraded
+    if (deg instanceof Map) {
+      for (const [id, v] of deg) degraded.push({ id: String(id), error: String((v as any)?.error ?? v) })
+    } else if (deg && typeof deg === 'object') {
+      for (const [id, v] of Object.entries(deg)) degraded.push({ id, error: String((v as any)?.error ?? v) })
+    }
+  } catch {}
   const ping = async (channel: string): Promise<{ ok: boolean; error?: string }> => {
     try {
       const res: any = await Promise.race([
@@ -42,5 +53,7 @@ export async function buildHealthReport(deps: HealthDeps, opts: HealthOpts = {})
     }
   }
   const channelsResult = await Promise.all(channels.map(async (channel) => ({ channel, ...(await ping(channel)) })))
-  return { uptimeMs: now - (deps.startedAt ?? now), plugins, toolCount, channels: channelsResult, version: opts.version ?? '0.0.0' }
+  // also treat failed channels as degraded
+  for (const c of channelsResult) if (!c.ok) degraded.push({ id: c.channel, error: c.error ?? 'channel failed' })
+  return { uptimeMs: now - (deps.startedAt ?? now), plugins, toolCount, channels: channelsResult, degraded, version: opts.version ?? '0.0.0' }
 }
