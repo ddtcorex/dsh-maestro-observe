@@ -1,6 +1,7 @@
 {
   "name": "@ddtcorex/dsh-maestro-observe",
   "version": "0.1.0",
+  "private": false,
   "description": "Maestro observe — trace/health/cost debug tooling (Phase 3)",
   "type": "module",
   "main": "./lib/index.js",
