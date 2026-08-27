@@ -1,6 +1,8 @@
 {
   "name": "@ddtcorex/dsh-maestro-observe",
   "version": "0.1.0",
+  "private": false,
+  "packageManager": "pnpm@11.7.0",
   "description": "Maestro observe — trace/health/cost debug tooling (Phase 3)",
   "type": "module",
   "main": "./lib/index.js",
