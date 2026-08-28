@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, rm, readFile, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ObserveStore, historyPath } from '../src/observe-store.js'
+import { ObserveStore, historyPath } from '../src/host/observe-store.js'
 
 describe('ObserveStore', () => {
   let dir: string

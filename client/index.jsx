@@ -3,7 +3,7 @@ import * as React from 'react'
 export default {
   inject: ['connection', 'slots'],
   apply(ctx) {
-    const CHANNEL = '/maestro/observe'
+    const CHANNEL = '/dsh-maestro-observe'
     const call = (req) => ctx.connection.rpc.call(CHANNEL, req)
     const fmt = (n) => (n ?? 0).toLocaleString('en-US')
 

@@ -16,7 +16,7 @@ interface HealthDeps {
 interface HealthOpts { channels?: string[]; timeoutMs?: number; version?: string; now?: number }
 
 export async function buildHealthReport(deps: HealthDeps, opts: HealthOpts = {}): Promise<HealthReport> {
-  const channels = opts.channels ?? ['/maestro/observe']
+  const channels = opts.channels ?? ['/dsh-maestro-observe']
   const timeoutMs = opts.timeoutMs ?? 2000
   const now = opts.now ?? Date.now()
   const plugins: Array<{ id: string; name?: string }> = []

@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ObserveStore } from '../src/observe-store.js'
-import { createObservePlugin, MAESTRO_OBSERVE_CHANNEL, toolSchema } from '../src/index.js'
+import { ObserveStore } from '../src/host/observe-store.js'
+import { createObservePlugin, MAESTRO_OBSERVE_CHANNEL, toolSchema } from '../src/host/index.js'
 
 describe('observe host plugin', () => {
   let dir: string

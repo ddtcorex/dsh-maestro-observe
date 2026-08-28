@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fromSessionEvent, fromTelemetryRecord } from '../src/trace-record.js'
+import { fromSessionEvent, fromTelemetryRecord } from '../src/host/trace-record.js'
 
 describe('trace-record reducers', () => {
   it('maps a turn event with tokens', () => {
