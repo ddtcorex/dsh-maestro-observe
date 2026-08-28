@@ -4,9 +4,9 @@ import { ObserveStore } from './observe-store.js'
 import { fromSessionEvent, fromTelemetryRecord } from './trace-record.js'
 import { buildHealthReport } from './health.js'
 
-export const MAESTRO_OBSERVE_CHANNEL = '/maestro/observe'
-const CHANNELS = ['/maestro/remote', '/maestro/review', '/maestro/govard', '/maestro/memory', '/maestro/mobile', '/maestro/guard', MAESTRO_OBSERVE_CHANNEL]
-const VERSION = '0.1.0'
+export const MAESTRO_OBSERVE_CHANNEL = '/dsh-maestro-observe'
+const CHANNELS = ['/dsh-maestro-remote', '/dsh-maestro-review', '/dsh-maestro-govard', '/dsh-maestro-memory', '/dsh-maestro-mobile', '/dsh-maestro-guard', MAESTRO_OBSERVE_CHANNEL]
+const VERSION = '0.2.0'
 
 export const toolSchema = z.object({
   op: z.union(['trace', 'health', 'cost']).required(),

@@ -12,11 +12,11 @@ Part of the Maestro Harness suite. Host half + client half (dashboard rendered v
 
 ## Layout
 
-- `src/index.ts` — host `apply()`: installs listeners, registers the observe tool + RPC endpoints.
-- `src/observe-store.ts` — ring buffer + daily aggregate + history (cost keyed by record `ts`, not `Date.now()`).
-- `src/trace-record.ts` — trace-record reducers.
-- `src/health.ts` — health report builder.
-- `src/augment.d.ts` — local structural types (do NOT import from `deepseek-harness`).
+- `src/host/index.ts` — host `apply()`: installs listeners, registers the observe tool + RPC endpoints.
+- `src/host/observe-store.ts` — ring buffer + daily aggregate + history (cost keyed by record `ts`, not `Date.now()`).
+- `src/host/trace-record.ts` — trace-record reducers.
+- `src/host/health.ts` — health report builder.
+- `src/host/augment.d.ts` — local structural types (do NOT import from `deepseek-harness`).
 - Client half (dashboard + readout) — browser side; registered in a queried slot.
 - `tests/*.test.ts` — vitest suites (23 tests): observe, observe-store, trace-record, health.
 
@@ -36,6 +36,13 @@ pnpm build:client  # client bundle (dashboard)
 - Default branch `master`. No direct commits to `master` — use `feat/<topic>` / `fix/<topic>` and a PR.
 - Conventional commits, imperative mood (`feat(observe): ...`, `fix(observe): ...`).
 - One TDD task = one commit; never commit while `pnpm verify` is red.
+- **Always request approval before merge or release:** never merge a PR/MR or publish a release (`git tag`/`pnpm publish`/`gh release`) without an explicit human approval — request review (`gh pr ready` / `gh pr request-review` / ask in chat) and wait for `APPROVED`. This applies to every `master` merge and every `vX.Y.Z` tag (see `docs/PUBLIC_REPO_CHECKLIST.md` §2/§8).
+
+## Release
+
+- Version bump follows semver (`package.json` `version` + `CHANGELOG.md` entry + `git tag vX.Y.Z` + `gh release create`).
+- Publishing uses `pnpm publish --access public` via the reusable `ddtcorex/dsh-maestro-ci` release workflow — never `npm publish` directly.
+- `CHANGELOG.md` is required for every release (Keep a Changelog + SemVer).
 
 ## Conventions
 
