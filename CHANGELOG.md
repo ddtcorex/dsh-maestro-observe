@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-09-02
+
+### Changed
+
+- Bump dsh-maestro-ci pin to e2448b1 (#8), sync community files and CHANGELOG (#7), unify release via reusable node-release (#6).
+
+
 ## [0.2.0] - 2026-08-27
 
 Degraded-health release — health report now surfaces degraded status and the
