@@ -18,7 +18,7 @@ Part of the Maestro Harness suite. Host half + client half (dashboard rendered v
 - `src/host/health.ts` — health report builder.
 - `src/host/augment.d.ts` — local structural types (do NOT import from `deepseek-harness`).
 - Client half (dashboard + readout) — browser side; registered in a queried slot.
-- `tests/*.test.ts` — vitest suites (23 tests): observe, observe-store, trace-record, health.
+- `tests/*.test.ts` — vitest suites: observe, observe-store, trace-record, health.
 
 ## Development
 
