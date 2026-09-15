@@ -220,7 +220,9 @@ export class ObserveStore {
         )
         for (const line of text.split('\n').filter(Boolean)) {
           try {
-            const r = JSON.parse(line) as TraceRecord
+            const raw = JSON.parse(line) as TraceRecord
+            // Same privacy bar as live pushes: redact before persist.
+            const r: TraceRecord = { ...raw, detail: redactDetail(raw.detail) }
             insert.run(
               r.ts, r.kind, r.sessionId ?? null, r.tool ?? null, r.latencyMs ?? null,
               r.isError ? 1 : 0, r.tokens?.inputTokens ?? 0, r.tokens?.outputTokens ?? 0,
