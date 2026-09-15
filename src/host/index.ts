@@ -88,7 +88,8 @@ export function createObservePlugin(
           } catch (e: any) {
             ;(ctx as any).logger?.warn?.('observe: telemetry skipped', e?.message)
           }
-          return next(record)
+          if (typeof next === 'function') return next(record)
+          return undefined
         }),
       )
       ctx.effect(() => (ctx as any).tools.register(tool))
@@ -105,6 +106,7 @@ export function createObservePlugin(
               store.configSet('last_digest_day', todayLocal)
               void runDigestOnce(ctx as any, store, Date.now())
             }
+            void runSpikeCheck(ctx as any, store, Date.now())
           } catch (e: any) {
             ;(ctx as any).logger?.warn?.('observe: digest tick failed', e?.message)
           }
@@ -199,17 +201,12 @@ export async function runDigestOnce(
   store: ObserveStore,
   nowMs: number = Date.now(),
 ): Promise<{ sent: boolean; reason?: string }> {
-  const notifier = ctxLike.get?.('maestroNotifier') as NotifierLike | undefined
-  if (!notifier || typeof notifier.send !== 'function') {
-    ctxLike.logger?.warn?.('observe: digest skipped, no maestroNotifier')
-    return { sent: false, reason: 'no-notifier' }
+  const resolved = resolveNotifierTarget(ctxLike, store)
+  if (!('notifier' in resolved)) {
+    if (resolved.reason === 'no-notifier') ctxLike.logger?.warn?.('observe: digest skipped, no maestroNotifier')
+    return { sent: false, reason: resolved.reason }
   }
   try {
-    const ids = typeof notifier.ids === 'function' ? notifier.ids() : ['telegram']
-    if (!ids.includes('telegram')) return { sent: false, reason: 'no-telegram-provider' }
-    const botToken = store.configGet('telegram.botToken')
-    const chatId = store.configGet('telegram.chatId')
-    if (!botToken || !chatId) return { sent: false, reason: 'no-target' }
     const dayStart = startOfDayLocal(nowMs)
     const snapshot: DigestSnapshot = {
       day: store.cost('day'),
@@ -220,11 +217,52 @@ export async function runDigestOnce(
         .map((b) => `${b.scope}:${b.key}`),
       errorCount: store.errorCountSince(dayStart),
     }
-    const res = await notifier.send('telegram', { botToken, chatId }, { text: buildDigestText(snapshot) })
+    const res = await resolved.notifier.send('telegram', resolved.target, { text: buildDigestText(snapshot) })
     return res?.sent ? { sent: true } : { sent: false, reason: 'send-failed' }
   } catch (e: any) {
     ctxLike.logger?.warn?.('observe: digest failed', e?.message)
     return { sent: false, reason: 'send-failed' }
+  }
+}
+
+function resolveNotifierTarget(
+  ctxLike: { get?: (name: string) => unknown },
+  store: ObserveStore,
+): { notifier: NotifierLike; target: { botToken: string; chatId: string } } | { reason: string } {
+  const notifier = ctxLike.get?.('maestroNotifier') as NotifierLike | undefined
+  if (!notifier || typeof notifier.send !== 'function') return { reason: 'no-notifier' }
+  const ids = typeof notifier.ids === 'function' ? notifier.ids() : ['telegram']
+  if (!ids.includes('telegram')) return { reason: 'no-telegram-provider' }
+  const botToken = store.configGet('telegram.botToken')
+  const chatId = store.configGet('telegram.chatId')
+  if (!botToken || !chatId) return { reason: 'no-target' }
+  return { notifier, target: { botToken, chatId } }
+}
+
+export async function runSpikeCheck(
+  ctxLike: { get?: (name: string) => unknown; logger?: { warn?: (...a: any[]) => void } },
+  store: ObserveStore,
+  nowMs: number = Date.now(),
+): Promise<{ alerted: boolean }> {
+  try {
+    const n = Number(store.configGet('spike_n') ?? '10')
+    const m = Number(store.configGet('spike_m') ?? '5')
+    if (!Number.isFinite(n) || !Number.isFinite(m) || n <= 0 || m <= 0) return { alerted: false }
+    const windowMs = m * 60_000
+    if (store.errorCountSince(nowMs - windowMs) < n) return { alerted: false }
+    const lastAlert = Number(store.configGet('last_spike_alert_ts') ?? '0')
+    if (Number.isFinite(lastAlert) && nowMs - lastAlert < windowMs) return { alerted: false }
+    const resolved = resolveNotifierTarget(ctxLike, store)
+    if (!('notifier' in resolved)) return { alerted: false }
+    const res = await resolved.notifier.send(
+      'telegram', resolved.target,
+      { text: `Observe alert: ${store.errorCountSince(nowMs - windowMs)} errors in last ${m} minute(s)` },
+    )
+    if (res?.sent) store.configSet('last_spike_alert_ts', String(nowMs))
+    return { alerted: res?.sent === true }
+  } catch (e: any) {
+    ctxLike.logger?.warn?.('observe: spike check failed', e?.message)
+    return { alerted: false }
   }
 }
 
