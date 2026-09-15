@@ -31,32 +31,6 @@ export function apply(ctx) {
       table: { width: '100%', borderCollapse: 'collapse', fontSize: 12, color: 'var(--dsw-alias-text-primary)' },
     }
 
-    function Readout(props) {
-      const { useState, useEffect } = React
-      const [cost, setCost] = useState(null)
-      const [errors, setErrors] = useState(0)
-      const sessionId = props?.sessionId ?? props?.session?.id
-      useEffect(() => {
-        if (!sessionId) return undefined
-        let alive = true
-        const tick = () => call('cost', { scope: 'session', sessionId }).then((v) => {
-          if (!alive) return
-          if (v) setCost(v.cost)
-          call('trace', { limit: 50 }).then((t) => { if (alive) setErrors(t ? t.records.filter((r) => r.isError).length : 0) }).catch(() => {})
-        }).catch(() => {})
-        tick()
-        const id = setInterval(tick, 30000)
-        return () => { alive = false; clearInterval(id) }
-      }, [sessionId])
-      if (!sessionId) return null
-      const total = totalOf(cost)
-      const errLabel = errors > 0 ? ` · ${errors} errors` : ''
-      return React.createElement('span', {
-        style: { fontSize: 12, opacity: 0.7, marginLeft: 8, color: 'var(--dsw-alias-text-secondary)' },
-        'aria-live': 'polite',
-      }, `${cost?.turns ?? 0} turns · ${fmt(total)} tok${errLabel}`)
-    }
-
     const TABS = [
       { id: 'cost', label: 'Cost' },
       { id: 'errors', label: 'Errors' },
@@ -161,14 +135,6 @@ export function apply(ctx) {
         slots.register(
           { name: 'settings.section', id: 'observe', order: 27, label: () => 'Observe' },
           Dashboard,
-        ))
-      return () => { try { dispose?.() } catch {} }
-    })
-    ctx.effect(() => {
-      const dispose = slots.inject('conversation.composer.dock', () =>
-        slots.register(
-          { name: 'conversation.composer.dock', id: 'observe-readout', order: 1, label: () => 'observe' },
-          Readout,
         ))
       return () => { try { dispose?.() } catch {} }
     })

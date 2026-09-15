@@ -27,14 +27,18 @@ describe('observe client', () => {
     expect(s).toContain(`call('cost'`)
     expect(s).toContain(`groupBy`)
     expect(s).toContain('res.ok ? res.value : null')
-    // readout must not call session cost without a session id
-    expect(s).toMatch(/sessionId\s*\?\s*call|if\s*\(\s*!?sessionId/)
   })
 
-  test('no emoji-as-icon, aria-live readout', () => {
+  test('no composer dock readout', () => {
+    const s = src()
+    expect(s).not.toContain('conversation.composer.dock')
+    expect(s).not.toContain('observe-readout')
+    expect(s).not.toMatch(/function Readout/)
+  })
+
+  test('no emoji-as-icon', () => {
     const s = src()
     expect(s).not.toMatch(/⚠|⚠️/)
-    expect(s).toContain('aria-live')
     expect(s).toContain('aria-selected')
   })
 
