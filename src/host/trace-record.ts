@@ -4,6 +4,10 @@ export interface TraceRecord {
   kind: 'turn' | 'step' | 'tool' | 'error'
   sessionId?: string
   tool?: string
+  // Links a tool/result back to its tool/call (real harness shape: the result
+  // carries no tool name, only message.source.callId). The store backfills
+  // the name from the matching call; never persisted, never trusted blindly.
+  callId?: string
   latencyMs?: number
   isError?: boolean
   tokens?: TokenUsage
@@ -39,6 +43,8 @@ export function fromSessionEvent(session: unknown, event: unknown): TraceRecord 
   const type = pick<string>(e, ['type'])
   if (!sessionId || !type) return null
   const data = e.data !== null && typeof e.data === 'object' ? e.data : {}
+  const message = data.message !== null && typeof data.message === 'object' ? data.message : {}
+  const source = message.source !== null && typeof message.source === 'object' ? message.source : {}
   const usage = data.usage !== null && typeof data.usage === 'object' ? data.usage : undefined
   const tokens: TokenUsage | undefined = usage ? {
     inputTokens: usage.inputTokens,
@@ -55,7 +61,10 @@ export function fromSessionEvent(session: unknown, event: unknown): TraceRecord 
     ts: typeof e.time === 'number' && Number.isFinite(e.time) ? e.time : Date.now(),
     kind,
     sessionId,
-    tool: type === 'tool/call' ? pick<string>(data, ['name']) : undefined,
+    tool: type === 'tool/call' || type === 'tool/result' ? pick<string>(data, ['name']) : undefined,
+    callId: type === 'tool/call' || type === 'tool/result'
+      ? pick<string>(data, ['callId']) ?? pick<string>(source, ['callId'])
+      : undefined,
     latencyMs: undefined,
     isError: isError || undefined,
     tokens,

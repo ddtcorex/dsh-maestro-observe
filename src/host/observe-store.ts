@@ -82,6 +82,14 @@ export class ObserveStore {
     const stored: TraceRecord = { ...record, ts, detail: undefined }
     try {
       stored.detail = redactDetail(record.detail, this.detailCap())
+      // tool/result carries no name — inherit it from the matching tool/call
+      // (same session + callId) already in the ring. No match: stay unnamed.
+      if (stored.kind === 'tool' && !stored.tool && stored.callId) {
+        const match = this.ring.find(
+          (r) => r.kind === 'tool' && r.callId === stored.callId && r.sessionId === stored.sessionId && !!r.tool,
+        )
+        if (match?.tool) stored.tool = match.tool
+      }
       this.ring.unshift(stored)
       if (this.ring.length > RING_CAP) this.ring.length = RING_CAP
       const db = this.ensureDb()
