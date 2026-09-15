@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- **Settings UI + composer readout** — rendering moved to
+  `dsh-maestro-dashboard` (Activity tab) calling the loopback RPC; this package
+  is host-only now (no client bundle, no `dsh.client` manifest).
+
+### Fixed
+
+- RPC migrated to endpoint dispatch with the `{ ok, value }` carrier shape
+  (single-`{ method }` calls failed silently against `serverResponseSchema`).
+
 ## [0.3.0] - 2026-09-15
 
 ### Added

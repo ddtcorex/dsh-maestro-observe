@@ -17,32 +17,22 @@
   "types": "./lib/index.d.ts",
   "exports": {
     ".": "./lib/index.js",
-    "./client": { "types": "./lib/client.d.ts", "default": "./lib/client.js" },
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
     "src",
-    "client",
     "cordis.patch.yml",
     "README.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "build:client": "node scripts/build-client.mjs && test -f lib/client.js",
     "verify": "tsc --noEmit",
     "test": "vitest run"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "platform": "web",
-      "inject": [
-        "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-ui-slots"
-      ]
     }
   },
   "peerDependencies": {
@@ -54,7 +44,6 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@types/node": "^22.0.0",
-    "esbuild": "^0.21.5",
     "typescript": "^5.8.0",
     "vitest": "^2.0.0"
   }
