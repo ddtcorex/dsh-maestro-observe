@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type { CostAggregate, TraceRecord } from './trace-record.js'
 import { normalizeSignature } from './trace-record.js'
+import { redactDetail } from './redact.js'
 
 // node:sqlite is loaded via createRequire: vite 5's static-import transform
 // cannot resolve the node:sqlite specifier (ERR_LOAD_URL), while require()
@@ -71,7 +72,8 @@ export class ObserveStore {
 
   async push(record: TraceRecord): Promise<void> {
     const ts = Number.isFinite(record.ts) ? record.ts : Date.now()
-    const stored: TraceRecord = { ...record, ts }
+    // Redact before anything else: ring and SQLite only ever hold the safe form.
+    const stored: TraceRecord = { ...record, ts, detail: redactDetail(record.detail) }
     this.ring.unshift(stored)
     if (this.ring.length > RING_CAP) this.ring.length = RING_CAP
     const db = this.ensureDb()
