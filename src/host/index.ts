@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { createRequire } from 'node:module'
 import z from 'schemastery'
 import { ObserveStore } from './observe-store.js'
 import { fromSessionEvent, fromTelemetryRecord } from './trace-record.js'
@@ -6,13 +7,13 @@ import { buildHealthReport } from './health.js'
 
 export const MAESTRO_OBSERVE_CHANNEL = '/dsh-maestro-observe'
 const CHANNELS = ['/dsh-maestro-remote', '/dsh-maestro-review', '/dsh-maestro-govard', '/dsh-maestro-memory', '/dsh-maestro-mobile', '/dsh-maestro-guard', MAESTRO_OBSERVE_CHANNEL]
-const VERSION = '0.2.0'
+export const VERSION: string = createRequire(import.meta.url)('../../package.json').version
 
 export const toolSchema = z.object({
   op: z.union(['trace', 'health', 'cost']).required(),
-  sessionId: z.string(),
-  limit: z.number().min(1).max(200),
-  scope: z.union(['day', 'session']),
+  sessionId: z.string().required(false),
+  limit: z.number().min(1).max(200).required(false).default(50),
+  scope: z.union(['day', 'session']).required(false).default('day'),
 })
 
 export function createObservePlugin(

@@ -108,4 +108,18 @@ describe('observe host plugin', () => {
     const res2: any = await plugin.tool.execute({ op: 'cost', scope: 'session', sessionId: '' })
     expect(res2.ok).toBe(false)
   })
+
+  it('tool schema accepts bare trace/health/cost-day ops', async () => {
+    expect(toolSchema({ op: 'trace' }).op).toBe('trace')
+    expect(toolSchema({ op: 'health' }).op).toBe('health')
+    expect(toolSchema({ op: 'cost' }).scope).toBe('day')
+    expect(toolSchema({ op: 'trace' }).limit).toBe(50)
+  })
+
+  it('VERSION matches package.json', async () => {
+    const { createRequire } = await import('node:module')
+    const pkg = createRequire(import.meta.url)('../package.json')
+    const idx = await import('../src/host/index.js')
+    expect((idx as any).VERSION).toBe(pkg.version)
+  })
 })
