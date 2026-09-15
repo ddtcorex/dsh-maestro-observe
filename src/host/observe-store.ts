@@ -44,6 +44,8 @@ export type TraceFilter = { sessionId?: string; tool?: string; kind?: TraceRecor
 export class ObserveStore {
   private ring: TraceRecord[] = []
   private db: DatabaseSync | null = null
+  private pending: TraceRecord[] = []
+  private insertStmt: any = null
 
   constructor(private dshHome?: string) {
     this.ensureDb()
@@ -76,17 +78,56 @@ export class ObserveStore {
     const stored: TraceRecord = { ...record, ts, detail: redactDetail(record.detail) }
     this.ring.unshift(stored)
     if (this.ring.length > RING_CAP) this.ring.length = RING_CAP
-    const db = this.ensureDb()
-    if (!db) return // degraded in-memory mode; ring still updated, next push retries open
-    db.prepare(
-      `INSERT INTO traces(ts, kind, session_id, tool, latency_ms, is_error, in_tok, out_tok, cache_r, cache_w, detail, trace_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      stored.ts, stored.kind, stored.sessionId ?? null, stored.tool ?? null,
-      stored.latencyMs ?? null, stored.isError ? 1 : 0,
-      stored.tokens?.inputTokens ?? 0, stored.tokens?.outputTokens ?? 0,
-      stored.tokens?.cacheReadTokens ?? 0, stored.tokens?.cacheWriteTokens ?? 0,
-      stored.detail ?? null, stored.traceId ?? null,
-    )
+    try {
+      const db = this.ensureDb()
+      if (!db) {
+        this.stashPending(stored)
+        return // degraded in-memory mode; flushed on the next successful open
+      }
+      if (!this.insertStmt) {
+        this.insertStmt = db.prepare(
+          `INSERT INTO traces(ts, kind, session_id, tool, latency_ms, is_error, in_tok, out_tok, cache_r, cache_w, detail, trace_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+      }
+      this.flushPending(db)
+      this.insertStmt.run(
+        stored.ts, stored.kind, stored.sessionId ?? null, stored.tool ?? null,
+        stored.latencyMs ?? null, stored.isError ? 1 : 0,
+        stored.tokens?.inputTokens ?? 0, stored.tokens?.outputTokens ?? 0,
+        stored.tokens?.cacheReadTokens ?? 0, stored.tokens?.cacheWriteTokens ?? 0,
+        stored.detail ?? null, stored.traceId ?? null,
+      )
+    } catch {
+      // Transient SQLITE_BUSY/locked must never escape as an unhandled
+      // rejection through fire-and-forget listeners: keep the ring, retry later.
+      this.db = null
+      this.insertStmt = null
+      this.stashPending(stored)
+    }
+  }
+
+  private stashPending(record: TraceRecord): void {
+    this.pending.push(record)
+    if (this.pending.length > 1000) this.pending.splice(0, this.pending.length - 1000)
+  }
+
+  private flushPending(db: DatabaseSync): void {
+    if (this.pending.length === 0) return
+    if (!this.insertStmt) {
+      this.insertStmt = db.prepare(
+        `INSERT INTO traces(ts, kind, session_id, tool, latency_ms, is_error, in_tok, out_tok, cache_r, cache_w, detail, trace_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+    }
+    for (const r of this.pending) {
+      this.insertStmt.run(
+        r.ts, r.kind, r.sessionId ?? null, r.tool ?? null,
+        r.latencyMs ?? null, r.isError ? 1 : 0,
+        r.tokens?.inputTokens ?? 0, r.tokens?.outputTokens ?? 0,
+        r.tokens?.cacheReadTokens ?? 0, r.tokens?.cacheWriteTokens ?? 0,
+        r.detail ?? null, r.traceId ?? null,
+      )
+    }
+    this.pending = []
   }
 
   trace(limit?: number, filter?: TraceFilter): TraceRecord[] {

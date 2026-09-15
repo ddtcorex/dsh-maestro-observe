@@ -77,11 +77,12 @@ describe('ObserveStore', () => {
     await rm(blockPath, { force: true })
     await mkdir(blockPath, { recursive: true, mode: 0o700 })
     await s.push({ ts: Date.now(), kind: 'turn', sessionId: 'q1', tokens: { inputTokens: 2, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0 } })
-    expect(s.cost('session', 'q1').inputTokens).toBe(2)
+    // the pre-recovery push is flushed, not lost
+    expect(s.cost('session', 'q1').inputTokens).toBe(3)
     expect(s.trace().length).toBe(2)
-    // the post-recovery write persisted
+    // both writes persisted
     const lines = await s.historyLines()
-    expect(lines).toBeGreaterThanOrEqual(1)
+    expect(lines).toBe(2)
   })
 
   it('concurrent load+push do not lose records', async () => {
