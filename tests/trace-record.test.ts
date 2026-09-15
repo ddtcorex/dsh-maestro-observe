@@ -28,12 +28,16 @@ describe('trace-record reducers (real harness shapes)', () => {
     })
     expect(call!.kind).toBe('tool')
     expect(call!.tool).toBe('bash')
+    expect(call!.callId).toBe('c1')
     const res = fromSessionEvent({ id: 's2' }, {
       type: 'tool/result', seq: 4, time: 3500,
-      data: { turn: 1, step: 2, message: { isError: true }, error: { name: 'ExitError', code: '1' } },
+      data: { turn: 1, step: 2, message: { source: { kind: 'tool', callId: 'c1' }, isError: true }, error: { name: 'ExitError', code: '1' } },
     })
     expect(res!.kind).toBe('tool')
     expect(res!.isError).toBe(true)
+    // tool/result carries no name — only message.source.callId linking to the call.
+    expect(res!.tool).toBeUndefined()
+    expect(res!.callId).toBe('c1')
   })
   it('falls back to step for other named events', () => {
     const r = fromSessionEvent(session, { type: 'step/start', seq: 5, time: 4000, data: { turn: 1, step: 3 } })
