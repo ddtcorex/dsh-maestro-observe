@@ -7,9 +7,10 @@ const SECRET_PATTERNS = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
 ]
 export const DETAIL_MAX_CHARS = 500
-export function redactDetail(input: unknown): string | undefined {
+export function redactDetail(input: unknown, maxChars: number = DETAIL_MAX_CHARS): string | undefined {
   if (typeof input !== 'string' || input.length === 0) return undefined
+  const cap = Number.isFinite(maxChars) && maxChars > 0 ? Math.floor(maxChars) : DETAIL_MAX_CHARS
   let out = input
   for (const re of SECRET_PATTERNS) out = out.replace(re, '[redacted]')
-  return out.length > DETAIL_MAX_CHARS ? out.slice(0, DETAIL_MAX_CHARS) : out
+  return out.length > cap ? out.slice(0, cap) : out
 }

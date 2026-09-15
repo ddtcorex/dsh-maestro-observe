@@ -29,6 +29,7 @@ export const toolSchema = z.object({
   limit: z.number().min(1).max(200).required(false).default(50),
   scope: z.union(['day', 'session']).required(false).default('day'),
   groupBy: z.union(['tool', 'session']).required(false),
+  day: z.string().required(false),
   action: z.string().required(false),
   key: z.string().required(false),
   limit_tokens: z.number().min(1).required(false),
@@ -74,7 +75,7 @@ export function createObservePlugin(
         if (scope === 'session' && !input?.sessionId) return { ok: false, error: 'sessionId required' }
         const cost = scope === 'session'
           ? store.cost('session', input?.sessionId ?? '')
-          : store.cost('day')
+          : store.cost('day', input?.day)
         return { ok: true, cost }
       }
       if (op === 'budget') return handleBudget(store, input)
@@ -125,8 +126,10 @@ export function createObservePlugin(
             const hhmm = `${pad(d.getHours())}:${pad(d.getMinutes())}`
             const todayLocal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
             if (hhmm === schedule && store.configGet('last_digest_day') !== todayLocal) {
-              store.configSet('last_digest_day', todayLocal)
+              // Stamp only after a successful send so a failed day retries next tick.
               void runDigestOnce(ctx as any, store, Date.now())
+                .then((res) => { if (res.sent) store.configSet('last_digest_day', todayLocal) })
+                .catch((e: any) => (ctx as any).logger?.warn?.('observe: digest failed', e?.message))
             }
             void runSpikeCheck(ctx as any, store, Date.now())
             if (store.configGet('last_retention_day') !== todayLocal) {
@@ -173,7 +176,7 @@ export function createObservePlugin(
                 return { ok: true, groups: store.costGrouped(req.groupBy, req?.since) }
               }
               if (scope === 'session' && !req?.sessionId) return { ok: false, error: 'sessionId required' }
-              return { ok: true, cost: scope === 'session' ? store.cost('session', req?.sessionId ?? '') : store.cost('day') }
+              return { ok: true, cost: scope === 'session' ? store.cost('session', req?.sessionId ?? '') : store.cost('day', req?.day) }
             }
             if (method === 'budget') return handleBudget(store, req)
             if (method === 'config') return handleConfig(store, req)
@@ -221,9 +224,9 @@ function handleConfig(store: ObserveStore, input: any) {
   return { ok: false, error: 'action must be get|set' }
 }
 
-function startOfDayLocal(nowMs: number): number {
+function startOfDayUTC(nowMs: number): number {
   const d = new Date(nowMs)
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
 }
 
 function totalOf(a: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number }): number {
@@ -245,7 +248,9 @@ export async function runDigestOnce(
     return { sent: false, reason: resolved.reason }
   }
   try {
-    const dayStart = startOfDayLocal(nowMs)
+    // Day windows are UTC midnights, matching cost('day') buckets; the fire
+    // time (digest_schedule) is still local HH:MM.
+    const dayStart = startOfDayUTC(nowMs)
     const snapshot: DigestSnapshot = {
       day: store.cost('day'),
       topTools: topByTotal(store.costGrouped('tool', dayStart), 5),
