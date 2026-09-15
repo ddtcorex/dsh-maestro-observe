@@ -190,19 +190,16 @@ describe('observe host plugin', () => {
     expect(bySince.records.length).toBe(1)
   })
 
-  it('boot_ts refreshes on every boot', async () => {
+  it('default apply boots without throwing (loader-entry regression)', async () => {
     const old = process.env.DSH_HOME
     process.env.DSH_HOME = dir
     try {
-      const seed = new ObserveStore(dir)
-      seed.configSet('boot_ts', '1')
       const def = (await import('../src/host/index.js')).default
-      const { ctx } = fakeCtx()
-      await def.apply(ctx as any)
-      const probe = new ObserveStore(dir)
-      const ts = Number(probe.configGet('boot_ts'))
-      expect(ts).toBeGreaterThan(1000)
-      expect(Date.now() - ts).toBeLessThan(60000)
+      const { ctx, rpcHandlers } = fakeCtx()
+      await def.apply(ctx as any) // must not throw: a throw fails the whole tree boot
+      const res: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'status' })
+      expect(res.ok).toBe(true)
+      expect(res.version).toBeTruthy()
     } finally {
       if (old === undefined) delete process.env.DSH_HOME
       else process.env.DSH_HOME = old
