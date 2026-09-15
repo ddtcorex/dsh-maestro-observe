@@ -34,6 +34,7 @@ export const toolSchema = z.object({
   limit_tokens: z.number().min(1).required(false),
   value: z.string().required(false),
   tool: z.string().required(false),
+  kind: z.union(['turn', 'step', 'tool', 'error']).required(false),
   since: z.number().required(false),
 })
 
@@ -56,7 +57,15 @@ export function createObservePlugin(
     schema: toolSchema,
     async execute(input: any) {
       const op = input?.op
-      if (op === 'trace') return { ok: true, records: store.trace(input?.limit ?? 50) }
+      if (op === 'trace') {
+        const filter = {
+          sessionId: input?.sessionId,
+          tool: input?.tool,
+          kind: input?.kind,
+          since: input?.since,
+        }
+        return { ok: true, records: store.trace(input?.limit ?? 50, filter) }
+      }
       if (op === 'cost') {
         const scope = input?.scope ?? 'day'
         if (input?.groupBy === 'tool' || input?.groupBy === 'session') {
@@ -147,7 +156,17 @@ export function createObservePlugin(
                 ringSize: store.ringSize,
                 historyLines: await store.historyLines(),
               }
-            if (method === 'trace') return { ok: true, records: store.trace(req?.limit ?? 50) }
+            if (method === 'trace') {
+              return {
+                ok: true,
+                records: store.trace(req?.limit ?? 50, {
+                  sessionId: req?.sessionId,
+                  tool: req?.tool,
+                  kind: req?.kind,
+                  since: req?.since,
+                }),
+              }
+            }
             if (method === 'cost') {
               const scope = req?.scope ?? 'day'
               if (req?.groupBy === 'tool' || req?.groupBy === 'session') {
