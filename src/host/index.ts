@@ -244,7 +244,15 @@ export async function runDigestOnce(
 ): Promise<{ sent: boolean; reason?: string }> {
   const resolved = resolveNotifierTarget(ctxLike, store)
   if (!('notifier' in resolved)) {
-    if (resolved.reason === 'no-notifier') ctxLike.logger?.warn?.('observe: digest skipped, no maestroNotifier')
+    // Quiet skip: warn at most once per local day so an unconfigured
+    // telegram doesn't log ~1440 times/day from the 60s tick.
+    const d = new Date(nowMs)
+    const pad = (n: number): string => String(n).padStart(2, '0')
+    const todayLocal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    if (store.configGet('last_digest_skip_day') !== todayLocal) {
+      store.configSet('last_digest_skip_day', todayLocal)
+      ctxLike.logger?.warn?.(`observe: digest skipped (${resolved.reason})`)
+    }
     return { sent: false, reason: resolved.reason }
   }
   try {

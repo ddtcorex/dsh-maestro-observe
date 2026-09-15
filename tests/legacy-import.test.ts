@@ -27,4 +27,18 @@ describe('legacy import privacy', () => {
     const step = records.find((r) => r.kind === 'step')!
     expect(step.detail!.length).toBeLessThanOrEqual(500)
   })
+
+  it('honors detail_max_chars from config on import', async () => {
+    const sub = join(dir, 'dsh-maestro-observe')
+    await mkdir(sub, { recursive: true })
+    await writeFile(
+      join(sub, 'history.jsonl'),
+      JSON.stringify({ ts: 1000, kind: 'step', sessionId: 's', detail: '0123456789abcdef' }) + '\n',
+    )
+    const seed = new ObserveStore(dir)
+    seed.configSet('detail_max_chars', '10')
+    const s = new ObserveStore(dir)
+    await s.load()
+    expect(s.trace(10)[0].detail).toBe('0123456789')
+  })
 })

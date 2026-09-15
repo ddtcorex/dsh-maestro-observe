@@ -47,6 +47,18 @@ describe('digest wiring', () => {
     expect(res.reason).toBe('no-notifier')
   })
 
+  it('skip warning fires at most once per day', async () => {
+    const warns: any[][] = []
+    const store = new ObserveStore(dir)
+    const ctx: any = { logger: { warn: (...a: any[]) => warns.push(a) }, get: () => undefined }
+    const now = Date.now()
+    const first = await runDigestOnce(ctx, store, now)
+    const second = await runDigestOnce(ctx, store, now + 61_000)
+    expect(first.reason).toBe('no-notifier')
+    expect(second.reason).toBe('no-notifier')
+    expect(warns.length).toBe(1)
+  })
+
   it('missing telegram target is skipped cleanly', async () => {
     const sent: any[] = []
     const store = new ObserveStore(dir)

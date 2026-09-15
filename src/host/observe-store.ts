@@ -77,11 +77,13 @@ export class ObserveStore {
   async push(record: TraceRecord): Promise<void> {
     const ts = Number.isFinite(record.ts) ? record.ts : Date.now()
     // Redact before anything else: ring and SQLite only ever hold the safe form.
-    const maxChars = Number(this.configGet('detail_max_chars') ?? DETAIL_MAX_CHARS)
-    const stored: TraceRecord = { ...record, ts, detail: redactDetail(record.detail, maxChars) }
-    this.ring.unshift(stored)
-    if (this.ring.length > RING_CAP) this.ring.length = RING_CAP
+    // NOTE: redact needs config, which needs the DB — the cap read is inside
+    // the try below (detailCap never throws; falls back to DETAIL_MAX_CHARS).
+    const stored: TraceRecord = { ...record, ts, detail: undefined }
     try {
+      stored.detail = redactDetail(record.detail, this.detailCap())
+      this.ring.unshift(stored)
+      if (this.ring.length > RING_CAP) this.ring.length = RING_CAP
       const db = this.ensureDb()
       if (!db) {
         this.stashPending(stored)
@@ -92,21 +94,48 @@ export class ObserveStore {
           `INSERT INTO traces(ts, kind, session_id, tool, latency_ms, is_error, in_tok, out_tok, cache_r, cache_w, detail, trace_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
       }
-      this.flushPending(db)
-      this.insertStmt.run(
-        stored.ts, stored.kind, stored.sessionId ?? null, stored.tool ?? null,
-        stored.latencyMs ?? null, stored.isError ? 1 : 0,
-        stored.tokens?.inputTokens ?? 0, stored.tokens?.outputTokens ?? 0,
-        stored.tokens?.cacheReadTokens ?? 0, stored.tokens?.cacheWriteTokens ?? 0,
-        stored.detail ?? null, stored.traceId ?? null,
-      )
+      // One transaction: a mid-flush failure rolls back, pending stays
+      // intact, and the retry cannot duplicate already-committed rows.
+      db.exec('BEGIN')
+      try {
+        this.flushPending(db)
+        this.insertRow(this.insertStmt, stored)
+        db.exec('COMMIT')
+      } catch (e) {
+        try { db.exec('ROLLBACK') } catch { /* best effort */ }
+        throw e
+      }
     } catch {
       // Transient SQLITE_BUSY/locked must never escape as an unhandled
       // rejection through fire-and-forget listeners: keep the ring, retry later.
-      this.db = null
-      this.insertStmt = null
+      this.closeDb()
       this.stashPending(stored)
     }
+  }
+
+  private insertRow(stmt: any, r: TraceRecord): void {
+    stmt.run(
+      r.ts, r.kind, r.sessionId ?? null, r.tool ?? null,
+      r.latencyMs ?? null, r.isError ? 1 : 0,
+      r.tokens?.inputTokens ?? 0, r.tokens?.outputTokens ?? 0,
+      r.tokens?.cacheReadTokens ?? 0, r.tokens?.cacheWriteTokens ?? 0,
+      r.detail ?? null, r.traceId ?? null,
+    )
+  }
+
+  private detailCap(): number {
+    try {
+      const v = Number(this.configGet('detail_max_chars') ?? DETAIL_MAX_CHARS)
+      return Number.isFinite(v) && v > 0 ? Math.floor(v) : DETAIL_MAX_CHARS
+    } catch {
+      return DETAIL_MAX_CHARS
+    }
+  }
+
+  private closeDb(): void {
+    try { this.db?.close() } catch { /* best effort */ }
+    this.db = null
+    this.insertStmt = null
   }
 
   private stashPending(record: TraceRecord): void {
@@ -122,13 +151,7 @@ export class ObserveStore {
       )
     }
     for (const r of this.pending) {
-      this.insertStmt.run(
-        r.ts, r.kind, r.sessionId ?? null, r.tool ?? null,
-        r.latencyMs ?? null, r.isError ? 1 : 0,
-        r.tokens?.inputTokens ?? 0, r.tokens?.outputTokens ?? 0,
-        r.tokens?.cacheReadTokens ?? 0, r.tokens?.cacheWriteTokens ?? 0,
-        r.detail ?? null, r.traceId ?? null,
-      )
+      this.insertRow(this.insertStmt, r)
     }
     this.pending = []
   }
@@ -257,6 +280,7 @@ export class ObserveStore {
     if (!db) return
     const done = db.prepare(`SELECT v FROM meta WHERE k = 'legacy_import_done'`).get() as { v?: string } | undefined
     if (!done) {
+      const cap = this.detailCap()
       try {
         const text = await readFile(legacyHistoryPath(this.dshHome), 'utf-8')
         const insert = db.prepare(
@@ -266,7 +290,7 @@ export class ObserveStore {
           try {
             const raw = JSON.parse(line) as TraceRecord
             // Same privacy bar as live pushes: redact before persist.
-            const r: TraceRecord = { ...raw, detail: redactDetail(raw.detail) }
+            const r: TraceRecord = { ...raw, detail: redactDetail(raw.detail, cap) }
             insert.run(
               r.ts, r.kind, r.sessionId ?? null, r.tool ?? null, r.latencyMs ?? null,
               r.isError ? 1 : 0, r.tokens?.inputTokens ?? 0, r.tokens?.outputTokens ?? 0,
