@@ -24,7 +24,8 @@ Ops are mirrored on the tool (`op`) and the RPC (`method`); unknown ops fail
 closed (`{ ok: false }`).
 
 - `trace { limit?, sessionId?, tool?, kind?, since? }` — newest-first records.
-- `cost { scope: 'day'|'session', sessionId?, groupBy?: 'tool'|'session' }`.
+- `cost { scope: 'day'|'session', sessionId?, day?, groupBy?: 'tool'|'session' }`
+  (`day` selects an explicit UTC day; `groupBy` without `since` is lifetime).
 - `budget { action: 'set'|'check', scope, key, limit_tokens? }` — token budgets.
 - `config { action: 'get'|'set', key, value? }` — operational knobs.
 - `errors { tool?, since? }` — grouped by tool + normalized signature.
@@ -37,14 +38,15 @@ closed (`{ ok: false }`).
 | key | default | meaning |
 |---|---|---|
 | `retention_days` | `30` | trace retention for the daily purge |
-| `detail_max_chars` | `500` | (reserved) detail truncation length |
+| `detail_max_chars` | `500` | detail truncation length applied by the redact pipeline |
 | `digest_schedule` | `08:00` | local `HH:MM` for the daily Telegram digest |
 | `spike_n` / `spike_m` | `10` / `5` | alert after N errors within M minutes |
 | `telegram.botToken` / `telegram.chatId` | — | Telegram target for digest + spike alerts |
 
 Secrets in trace details are redacted before persist (secret shapes →
-`[redacted]`, detail truncated). Session cost is session-lifetime; day cost is
-per UTC day.
+`[redacted]`, detail truncated). Session cost is session-lifetime; day cost,
+digest windows, and retention cutoffs are per UTC day (the digest *fire time*
+is local `HH:MM`).
 
 ## Telegram setup
 
