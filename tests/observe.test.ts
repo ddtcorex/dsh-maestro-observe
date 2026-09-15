@@ -108,4 +108,104 @@ describe('observe host plugin', () => {
     const res2: any = await plugin.tool.execute({ op: 'cost', scope: 'session', sessionId: '' })
     expect(res2.ok).toBe(false)
   })
+
+  it('tool schema accepts bare trace/health/cost-day ops', async () => {
+    expect(toolSchema({ op: 'trace' }).op).toBe('trace')
+    expect(toolSchema({ op: 'health' }).op).toBe('health')
+    expect(toolSchema({ op: 'cost' }).scope).toBe('day')
+    expect(toolSchema({ op: 'trace' }).limit).toBe(50)
+  })
+
+  it('VERSION matches package.json', async () => {
+    const { createRequire } = await import('node:module')
+    const pkg = createRequire(import.meta.url)('../package.json')
+    const idx = await import('../src/host/index.js')
+    expect((idx as any).VERSION).toBe(pkg.version)
+  })
+
+  it('cost groupBy tool splits tokens', async () => {
+    const store = new ObserveStore(dir)
+    await store.push({ ts: Date.now(), kind: 'tool', tool: 'bash', sessionId: 'g', tokens: { inputTokens: 5, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 } })
+    await store.push({ ts: Date.now(), kind: 'tool', tool: 'web', sessionId: 'g', tokens: { inputTokens: 7, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 } })
+    const { ctx } = fakeCtx()
+    const plugin = createObservePlugin(store)
+    await plugin.apply(ctx)
+    const res: any = await plugin.tool.execute({ op: 'cost', scope: 'day', groupBy: 'tool' })
+    expect(res.ok).toBe(true)
+    expect(res.groups.find((g: any) => g.key === 'bash').agg.inputTokens).toBe(5)
+    expect(res.groups.find((g: any) => g.key === 'web').agg.inputTokens).toBe(7)
+  })
+
+  it('budget set/check round-trips via tool and rpc', async () => {
+    const store = new ObserveStore(dir)
+    const { ctx, rpcHandlers } = fakeCtx()
+    const plugin = createObservePlugin(store)
+    await plugin.apply(ctx)
+    const day = new Date().toISOString().slice(0, 10)
+    const setRes: any = await plugin.tool.execute({ op: 'budget', action: 'set', scope: 'day', key: day, limit_tokens: 100 })
+    expect(setRes.ok).toBe(true)
+    const checkRes: any = await plugin.tool.execute({ op: 'budget', action: 'check', scope: 'day', key: day })
+    expect(checkRes.ok).toBe(true)
+    expect(checkRes.budget.limit).toBe(100)
+    const rpcRes: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'budget', action: 'check', scope: 'day', key: day })
+    expect(rpcRes.ok).toBe(true)
+    expect(rpcRes.budget.limit).toBe(100)
+    const bad: any = await plugin.tool.execute({ op: 'budget', action: 'check', scope: 'day' })
+    expect(bad.ok).toBe(false)
+  })
+
+  it('config get/set round-trips via tool and rpc', async () => {
+    const store = new ObserveStore(dir)
+    const { ctx, rpcHandlers } = fakeCtx()
+    const plugin = createObservePlugin(store)
+    await plugin.apply(ctx)
+    const setRes: any = await plugin.tool.execute({ op: 'config', action: 'set', key: 'retention_days', value: '30' })
+    expect(setRes.ok).toBe(true)
+    const getRes: any = await plugin.tool.execute({ op: 'config', action: 'get', key: 'retention_days' })
+    expect(getRes).toEqual({ ok: true, value: '30' })
+    const rpcRes: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'config', action: 'get', key: 'retention_days' })
+    expect(rpcRes).toEqual({ ok: true, value: '30' })
+    const bad: any = await plugin.tool.execute({ op: 'config', action: 'wipe' })
+    expect(bad.ok).toBe(false)
+  })
+
+  it('trace honors sessionId/tool/kind/since filters on tool and rpc', async () => {
+    const store = new ObserveStore(dir)
+    const now = Date.now()
+    await store.push({ ts: now - 1000, kind: 'tool', tool: 'bash', sessionId: 's1' })
+    await store.push({ ts: now, kind: 'tool', tool: 'web', sessionId: 's2' })
+    const { ctx, rpcHandlers } = fakeCtx()
+    const plugin = createObservePlugin(store)
+    await plugin.apply(ctx)
+    const bySession: any = await plugin.tool.execute({ op: 'trace', sessionId: 's1' })
+    expect(bySession.ok).toBe(true)
+    expect(bySession.records.length).toBe(1)
+    expect(bySession.records[0].tool).toBe('bash')
+    const byTool: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'trace', tool: 'web' })
+    expect(byTool.records.length).toBe(1)
+    expect(byTool.records[0].sessionId).toBe('s2')
+    const byKind: any = await plugin.tool.execute({ op: 'trace', kind: 'error' })
+    expect(byKind.records.length).toBe(0)
+    const bySince: any = await plugin.tool.execute({ op: 'trace', since: now })
+    expect(bySince.records.length).toBe(1)
+  })
+
+  it('boot_ts refreshes on every boot', async () => {
+    const old = process.env.DSH_HOME
+    process.env.DSH_HOME = dir
+    try {
+      const seed = new ObserveStore(dir)
+      seed.configSet('boot_ts', '1')
+      const def = (await import('../src/host/index.js')).default
+      const { ctx } = fakeCtx()
+      await def.apply(ctx as any)
+      const probe = new ObserveStore(dir)
+      const ts = Number(probe.configGet('boot_ts'))
+      expect(ts).toBeGreaterThan(1000)
+      expect(Date.now() - ts).toBeLessThan(60000)
+    } finally {
+      if (old === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = old
+    }
+  })
 })

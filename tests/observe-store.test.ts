@@ -48,7 +48,7 @@ describe('ObserveStore', () => {
   })
 
   it('historyPath is namespaced dsh-maestro-observe', () => {
-    expect(historyPath(dir)).toContain(join('dsh-maestro-observe', 'history.jsonl'))
+    expect(historyPath(dir)).toContain(join('dsh-maestro-observe', 'observe.sqlite'))
   })
 
   // --- Fix Round 1 covering tests ---
@@ -69,20 +69,20 @@ describe('ObserveStore', () => {
     const blockPath = join(dir, 'dsh-maestro-observe')
     await writeFile(blockPath, 'block')
     const s = new ObserveStore(dir)
-    // first push will fail to write (mkdir on a file) but queue should recover via .catch()
+    // first push cannot open the DB but must not throw; ring still updates (degraded mode)
     await s.push({ ts: Date.now(), kind: 'turn', sessionId: 'q1', tokens: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 } })
-    // ring and aggregates still updated despite write failure
     expect(s.trace().length).toBe(1)
-    expect(s.cost('session', 'q1').inputTokens).toBe(1)
-    // fix FS so next write can succeed
+    expect(await s.historyLines()).toBe(0)
+    // fix FS so the next open can succeed
     await rm(blockPath, { force: true })
     await mkdir(blockPath, { recursive: true, mode: 0o700 })
     await s.push({ ts: Date.now(), kind: 'turn', sessionId: 'q1', tokens: { inputTokens: 2, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0 } })
+    // the pre-recovery push is flushed, not lost
     expect(s.cost('session', 'q1').inputTokens).toBe(3)
     expect(s.trace().length).toBe(2)
-    // second write should have persisted at least one line
+    // both writes persisted
     const lines = await s.historyLines()
-    expect(lines).toBeGreaterThanOrEqual(1)
+    expect(lines).toBe(2)
   })
 
   it('concurrent load+push do not lose records', async () => {

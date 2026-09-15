@@ -4,6 +4,34 @@ All notable changes to this project are documented in this file. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **SQLite store** — `ObserveStore` persists to local `observe.sqlite` (WAL);
+  aggregates are SQL `GROUP BY` (no more 200-row tail limits); one-shot legacy
+  JSONL import; idempotent `load()`; 30-day retention purge + weekly VACUUM.
+- **Budgets + config ops** — `budget set|check`, `config get|set` on tool and RPC.
+- **Grouped cost** — `cost … groupBy: tool|session`.
+- **Error tracking** — `errors` grouped by tool + normalized signature;
+  configurable Telegram spike alerts (`spike_n`/`spike_m`).
+- **Latency** — `latency` op with p50/p95/p99 per tool.
+- **Health v2** — dynamic channel discovery, deduped degraded list, uptime
+  persisted across restarts, clearable ping timeouts.
+- **Telegram digest** — daily cost digest via the optional `maestroNotifier`
+  service (absent notifier degrades to a warning, never throws).
+- **Privacy** — secret shapes redacted and detail truncated before persist.
+- **Client** — tabbed Cost/Errors/Latency/Health dashboard with DSW tokens;
+  real `build:client` (esbuild → `lib/client.js`); patch row carries
+  `channel` + `inject`.
+
+### Fixed
+
+- Tool schema fields optional with defaults (`trace`/`health`/`cost-day`
+  callable bare); `VERSION` read from `package.json` (drift-proof).
+- Session cost keyed by record day (was `Date.now()`); telemetry listener
+  guards a missing `next` callback.
+
 ## [0.2.1] - 2026-09-02
 
 ### Changed

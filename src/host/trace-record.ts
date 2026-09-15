@@ -8,6 +8,7 @@ export interface TraceRecord {
   isError?: boolean
   tokens?: TokenUsage
   detail?: string
+  traceId?: string
 }
 export interface CostAggregate { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; turns: number }
 export type CostKey =
@@ -18,6 +19,14 @@ function pick<T>(obj: any, keys: string[]): T | undefined {
   if (!obj || typeof obj !== 'object') return undefined
   for (const k of keys) if (obj[k] !== undefined && obj[k] !== null) return obj[k]
   return undefined
+}
+
+export function normalizeSignature(detail: string): string {
+  return detail
+    .replace(/\b0x[0-9a-f]+\b/gi, '#')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f-]{4,}\b/gi, '#')
+    .replace(/\b\d+\b/g, '#')
+    .replace(/\/[^\s:]+\.(ts|js|mjs|go|py|php)/g, '#')
 }
 
 export function fromSessionEvent(payload: unknown): TraceRecord | null {
@@ -37,6 +46,7 @@ export function fromSessionEvent(payload: unknown): TraceRecord | null {
     isError: pick<boolean>(p, ['isError', 'error']),
     tokens,
     detail: pick<string>(p, ['detail', 'message', 'reason']),
+    traceId: pick<string>(p, ['traceId', 'trace_id']),
   }
 }
 
@@ -50,5 +60,6 @@ export function fromTelemetryRecord(record: unknown): TraceRecord | null {
     sessionId: pick<string>(r, ['sessionId', 'session']),
     isError: true,
     detail: [pick<string>(r, ['reason', 'message', 'detail']), r.channel ? `channel:${r.channel}` : ''].filter(Boolean).join(' ') || 'error',
+    traceId: pick<string>(r, ['traceId', 'trace_id']),
   }
 }
