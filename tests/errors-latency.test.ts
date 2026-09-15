@@ -53,4 +53,25 @@ describe('errors grouped', () => {
     const res = await runSpikeCheck(ctx, s, Date.now())
     expect(res.alerted).toBe(false)
   })
+
+  it('computes p50/p95/p99', async () => {
+    const s = new ObserveStore(dir)
+    for (let i = 1; i <= 100; i++) await s.push({ ts: i, kind: 'tool', tool: 'bash', latencyMs: i, sessionId: 'l' })
+    const l = s.latencyPercentiles('bash')
+    expect(l.count).toBe(100)
+    expect(l.p50).toBe(50)
+    expect(l.p95).toBe(95)
+    expect(l.p99).toBe(99)
+  })
+
+  it('latency op mirrors store percentiles', async () => {
+    const { createObservePlugin } = await import('../src/host/index.js')
+    const s = new ObserveStore(dir)
+    for (let i = 1; i <= 10; i++) await s.push({ ts: i, kind: 'tool', tool: 'web', latencyMs: i * 10, sessionId: 'm' })
+    const plugin = createObservePlugin(s)
+    const res: any = await plugin.tool.execute({ op: 'latency', tool: 'web' })
+    expect(res.ok).toBe(true)
+    expect(res.latency.count).toBe(10)
+    expect(res.latency.p50).toBe(50)
+  })
 })

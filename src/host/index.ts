@@ -59,7 +59,7 @@ export function createObservePlugin(
       if (op === 'config') return handleConfig(store, input)
       if (op === 'errors') return { ok: true, groups: store.errorsGrouped(input?.tool, input?.since) }
       if (op === 'latency') return { ok: true, latency: store.latencyPercentiles(input?.tool, input?.since) }
-      if (op === 'health') return { ok: true, health: await buildHealthReport(resolveDeps(), { channels: CHANNELS, version: VERSION }) }
+      if (op === 'health') return { ok: true, health: await buildHealthReport(resolveDeps(), { listChannels: () => discoverChannels(resolveDeps()), version: VERSION }) }
       return { ok: false, error: 'unknown op' }
     },
   }
@@ -141,7 +141,7 @@ export function createObservePlugin(
             if (method === 'config') return handleConfig(store, req)
             if (method === 'errors') return { ok: true, groups: store.errorsGrouped(req?.tool, req?.since) }
             if (method === 'latency') return { ok: true, latency: store.latencyPercentiles(req?.tool, req?.since) }
-            if (method === 'health') return { ok: true, health: await buildHealthReport(ctx as any, { channels: CHANNELS, version: VERSION }) }
+            if (method === 'health') return { ok: true, health: await buildHealthReport(ctx as any, { listChannels: () => discoverChannels(ctx as any), version: VERSION }) }
             return { ok: false, error: 'unknown method' }
           },
           { authority: 'loopback' },
@@ -266,11 +266,25 @@ export async function runSpikeCheck(
   }
 }
 
+function discoverChannels(deps: any): string[] {
+  try {
+    const set = deps?.registry?.plugins
+    const ids: string[] = set instanceof Set
+      ? [...set].map((p: any) => (typeof p === 'object' && p !== null ? String(p.id ?? '') : String(p)))
+      : []
+    const chans = ids.filter(Boolean).map((id) => (id.startsWith('/') ? id : `/${id}`))
+    if (chans.length > 0) return chans
+  } catch { /* fall through to legacy list */ }
+  return CHANNELS
+}
+
 export default {
   inject: ['tools'] as const,
   async apply(ctx: Context) {
     const store = new ObserveStore()
     await store.load()
+    if (!store.configGet('boot_ts')) store.configSet('boot_ts', String(Date.now()))
+    ;(ctx as any).bootTs = Number(store.configGet('boot_ts'))
     return createObservePlugin(store, () => ctx).apply(ctx)
   },
 }
