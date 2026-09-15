@@ -163,6 +163,12 @@ export class ObserveStore {
     return { spent, limit, pct: limit > 0 ? spent / limit : 0, over: limit > 0 && spent > limit }
   }
 
+  listBudgets(): Array<{ scope: string; key: string; limitTokens: number }> {
+    const db = this.ensureDb()
+    if (!db) return []
+    return db.prepare(`SELECT scope, key, limit_tokens AS limitTokens FROM budgets`).all() as unknown as Array<{ scope: string; key: string; limitTokens: number }>
+  }
+
   errorsGrouped(tool?: string, since?: number): Array<{ tool: string; signature: string; count: number; firstTs: number; lastTs: number; exampleSession?: string }> {
     const db = this.ensureDb()
     if (!db) return []
