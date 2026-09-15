@@ -29,7 +29,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "build:client": "esbuild client/index.jsx --bundle --platform=browser --external:react --external:react-dom --outfile=lib/client.js --log-level=warning && test -f lib/client.js",
+    "build:client": "node scripts/build-client.mjs && test -f lib/client.js",
     "verify": "tsc --noEmit",
     "test": "vitest run"
   },

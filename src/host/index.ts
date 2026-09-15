@@ -55,7 +55,32 @@ export function createObservePlugin(
   const tool = {
     name: 'maestro-observe',
     description: 'Maestro observe — trace, health and cost snapshots for debugging the Maestro plugin stack.',
-    schema: toolSchema,
+    // Plain JSON Schema for the harness registry (mirrors toolSchema above,
+    // which remains the documented input contract + unit-test surface).
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['op'],
+      properties: {
+        op: { type: 'string', enum: ['trace', 'health', 'cost', 'budget', 'config', 'errors', 'latency'] },
+        sessionId: { type: 'string' },
+        limit: { type: 'number', minimum: 1, maximum: 200 },
+        scope: { type: 'string', enum: ['day', 'session'] },
+        groupBy: { type: 'string', enum: ['tool', 'session'] },
+        day: { type: 'string' },
+        action: { type: 'string' },
+        key: { type: 'string' },
+        limit_tokens: { type: 'number', minimum: 1 },
+        value: { type: 'string' },
+        tool: { type: 'string' },
+        kind: { type: 'string', enum: ['turn', 'step', 'tool', 'error'] },
+        since: { type: 'number' },
+      },
+    },
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (args: any, value: any) => [{ type: 'text', text: renderResult(args?.op, value) }],
+    },
     async execute(input: any) {
       const op = input?.op
       if (op === 'trace') {
@@ -192,8 +217,29 @@ export function createObservePlugin(
   }
 }
 
-function handleBudget(store: ObserveStore, input: any) {
-  const action = input?.action
+function renderResult(op: string, value: any): string {
+  if (!value?.ok) return `observe ${op ?? '?'} failed: ${value?.error ?? 'unknown error'}`
+  if (op === 'trace') return `observe trace: ${value.records?.length ?? 0} records`
+  if (op === 'cost') {
+    if (value.groups) return `observe cost groups: ${value.groups.length}`
+    const c = value.cost ?? {}
+    return `observe cost: ${c.turns ?? 0} turns · ${(c.inputTokens ?? 0) + (c.outputTokens ?? 0)} tokens`
+  }
+  if (op === 'budget') return value.budget ? `observe budget: ${value.budget.spent}/${value.budget.limit}${value.budget.over ? ' OVER' : ''}` : 'observe budget updated'
+  if (op === 'config') return 'value' in value ? `observe config: ${String(value.value)}` : 'observe config updated'
+  if (op === 'errors') return `observe errors: ${value.groups?.length ?? 0} groups`
+  if (op === 'latency') {
+    const l = value.latency ?? {}
+    return `observe latency: n=${l.count ?? 0} p50=${l.p50 ?? 0}ms p95=${l.p95 ?? 0}ms`
+  }
+  if (op === 'health') {
+    const h = value.health ?? {}
+    return `observe health: ${h.toolCount ?? 0} tools · ${h.plugins?.length ?? 0} plugins · degraded ${h.degraded?.length ?? 0}`
+  }
+  return `observe ${op}: ok`
+}
+
+function handleBudget(store: ObserveStore, input: any) {  const action = input?.action
   const scope = input?.scope ?? 'day'
   if (scope !== 'day' && scope !== 'session') return { ok: false, error: 'scope must be day|session' }
   if (action === 'set') {
@@ -334,9 +380,9 @@ export default {
   async apply(ctx: Context) {
     const store = new ObserveStore()
     await store.load()
-    // Refresh every boot: uptime = since this boot, visible to late readers.
-    store.configSet('boot_ts', String(Date.now()))
-    ;(ctx as any).bootTs = Number(store.configGet('boot_ts'))
+    // NOTE: never stash values on ctx (Cordis throws "cannot set property
+    // without provide" and fails the whole tree boot). Health uptime reads
+    // deps.bootTs (explicit callers) or deps.startedAt (the live ctx).
     return createObservePlugin(store, () => ctx).apply(ctx)
   },
 }
