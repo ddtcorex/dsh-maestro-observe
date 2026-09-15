@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-09-15
 
 ### Added
 
@@ -84,5 +84,6 @@ debug-tooling plugin for the DeepSeek Harness (trace/health/cost).
 - **CI** — `.github/workflows/ci.yml` calling `ddtcorex/dsh-maestro-ci`
   `node-plugin.yml` (pinned SHA), `pnpm@11.7.0`.
 
+[0.3.0]: https://github.com/ddtcorex/dsh-maestro-observe/releases/tag/v0.3.0
 [0.2.0]: https://github.com/ddtcorex/dsh-maestro-observe/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ddtcorex/dsh-maestro-observe/releases/tag/v0.1.0
