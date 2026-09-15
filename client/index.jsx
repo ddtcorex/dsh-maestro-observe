@@ -6,6 +6,22 @@ export default {
     const CHANNEL = '/dsh-maestro-observe'
     const call = (req) => ctx.connection.rpc.call(CHANNEL, req)
     const fmt = (n) => (n ?? 0).toLocaleString('en-US')
+    const totalOf = (c) => (c ? (c.inputTokens ?? 0) + (c.outputTokens ?? 0) + (c.cacheReadTokens ?? 0) + (c.cacheWriteTokens ?? 0) : 0)
+
+    const T = {
+      text: { color: 'var(--dsw-alias-text-primary)' },
+      subtle: { color: 'var(--dsw-alias-text-secondary)' },
+      panel: { padding: 16, color: 'var(--dsw-alias-text-primary)' },
+      tab: (active) => ({
+        padding: '8px 12px',
+        minHeight: 40,
+        border: '1px solid var(--dsw-alias-border-l1)',
+        borderRadius: 8,
+        background: active ? 'var(--dsw-alias-brand-primary)' : 'transparent',
+        color: 'var(--dsw-alias-text-primary)',
+      }),
+      table: { width: '100%', borderCollapse: 'collapse', fontSize: 12, color: 'var(--dsw-alias-text-primary)' },
+    }
 
     function Readout(props) {
       const { useState, useEffect } = React
@@ -13,6 +29,7 @@ export default {
       const [errors, setErrors] = useState(0)
       const sessionId = props?.sessionId ?? props?.session?.id
       useEffect(() => {
+        if (!sessionId) return undefined
         let alive = true
         const tick = () => call({ method: 'cost', scope: 'session', sessionId }).then((res) => {
           if (!alive) return
@@ -23,42 +40,109 @@ export default {
         const id = setInterval(tick, 30000)
         return () => { alive = false; clearInterval(id) }
       }, [sessionId])
-      const total = cost ? (cost.inputTokens ?? 0) + (cost.outputTokens ?? 0) : 0
-      return React.createElement('span', { style: { fontSize: 12, opacity: 0.7, marginLeft: 8 } },
-        `${cost?.turns ?? 0} turns \u00B7 ${fmt(total)} tok${errors ? ` \u00B7 \u26A0 ${errors}` : ''}`)
+      if (!sessionId) return null
+      const total = totalOf(cost)
+      return React.createElement('span', { style: { fontSize: 12, opacity: 0.7, marginLeft: 8, color: 'var(--dsw-alias-text-secondary)' } },
+        `${cost?.turns ?? 0} turns · ${fmt(total)} tok${errors ? ` · ⚠ ${errors}` : ''}`)
     }
+
+    const TABS = [
+      { id: 'cost', label: 'Cost' },
+      { id: 'errors', label: 'Errors' },
+      { id: 'latency', label: 'Latency' },
+      { id: 'health', label: 'Health' },
+    ]
 
     function Dashboard(_props) {
       const { useState, useEffect } = React
-      const [state, setState] = useState({ cost: null, trace: [], health: null })
+      const [tab, setTab] = useState('cost')
+      const [cost, setCost] = useState(null)
+      const [groups, setGroups] = useState([])
+      const [errors, setErrors] = useState([])
+      const [latency, setLatency] = useState(null)
+      const [health, setHealth] = useState(null)
       useEffect(() => {
         let alive = true
-        const tick = () => Promise.all([
-          call({ method: 'cost', scope: 'day' }),
-          call({ method: 'trace', limit: 50 }),
-          call({ method: 'health' }),
-        ]).then(([c, t, h]) => { if (alive) setState({ cost: c?.ok ? c.cost : null, trace: t?.ok ? t.records : [], health: h?.ok ? h.health : null }) }).catch(() => {})
+        const tick = async () => {
+          try {
+            if (tab === 'cost') {
+              const [c, g] = await Promise.all([
+                call({ method: 'cost', scope: 'day' }),
+                call({ method: 'cost', scope: 'day', groupBy: 'tool' }),
+              ])
+              if (!alive) return
+              if (c?.ok) setCost(c.cost)
+              if (g?.ok) setGroups(g.groups ?? [])
+            } else if (tab === 'errors') {
+              const e = await call({ method: 'errors' })
+              if (alive && e?.ok) setErrors(e.groups ?? [])
+            } else if (tab === 'latency') {
+              const l = await call({ method: 'latency' })
+              if (alive && l?.ok) setLatency(l.latency)
+            } else {
+              const h = await call({ method: 'health' })
+              if (alive && h?.ok) setHealth(h.health)
+            }
+          } catch { /* keep last good state */ }
+        }
         tick()
         const id = setInterval(tick, 30000)
         return () => { alive = false; clearInterval(id) }
-      }, [])
-      const c = state.cost
-      const total = c ? (c.inputTokens ?? 0) + (c.outputTokens ?? 0) + (c.cacheReadTokens ?? 0) + (c.cacheWriteTokens ?? 0) : 0
-      const row = (r) => React.createElement('tr', { key: r.ts + '-' + (r.tool ?? r.kind) },
-        React.createElement('td', null, new Date(r.ts).toLocaleTimeString()),
-        React.createElement('td', null, r.kind),
-        React.createElement('td', null, r.tool ?? ''),
-        React.createElement('td', null, r.latencyMs != null ? `${r.latencyMs}ms` : ''),
-        React.createElement('td', null, r.isError ? '\u26A0' : ''))
-      return React.createElement('div', { style: { padding: 16 } },
-        React.createElement('h3', null, 'Observe'),
-        React.createElement('p', null, `Today: ${c?.turns ?? 0} turns \u00B7 ${fmt(total)} tokens`),
-        React.createElement('p', null, state.health ? `uptime ${Math.round(state.health.uptimeMs / 60000)}m \u00B7 ${state.health.toolCount} tools \u00B7 ${state.health.plugins.length} plugins${state.health.degraded?.length ? ` \u00B7 \u26A0 degraded ${state.health.degraded.length}` : ''}` : 'health \u2026'),
-        state.health?.degraded?.length ? React.createElement('ul', { style: { fontSize: 11, color: '#b00', margin: '4px 0' } }, state.health.degraded.map((d) => React.createElement('li', { key: d.id }, `${d.id}: ${d.error}`))) : null,
-        React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12 } },
-          React.createElement('thead', null, React.createElement('tr', null,
-            React.createElement('th', null, 'time'), React.createElement('th', null, 'kind'), React.createElement('th', null, 'tool'), React.createElement('th', null, 'lat'), React.createElement('th', null, 'err'))),
-          React.createElement('tbody', null, state.trace.slice(0, 50).map(row))))
+      }, [tab])
+
+      const tabBar = React.createElement('div', { style: { display: 'flex', gap: 8, marginBottom: 12 }, role: 'tablist' },
+        TABS.map((t) => React.createElement('button', {
+          key: t.id,
+          'data-testid': `observe-tab-${t.id}`,
+          role: 'tab',
+          'aria-selected': tab === t.id,
+          onClick: () => setTab(t.id),
+          style: T.tab(tab === t.id),
+        }, t.label)))
+
+      let panel = null
+      if (tab === 'cost') {
+        panel = React.createElement('div', { 'data-testid': 'observe-panel-cost' },
+          React.createElement('p', { style: T.subtle }, `Today: ${cost?.turns ?? 0} turns · ${fmt(totalOf(cost))} tokens`),
+          React.createElement('table', { style: T.table },
+            React.createElement('thead', null, React.createElement('tr', null,
+              React.createElement('th', null, 'tool'), React.createElement('th', null, 'tokens'))),
+            React.createElement('tbody', null, groups.slice(0, 20).map((g, i) =>
+              React.createElement('tr', { key: `${g.key}-${i}` },
+                React.createElement('td', null, g.key),
+                React.createElement('td', null, fmt(totalOf(g.agg))))))))
+      } else if (tab === 'errors') {
+        panel = React.createElement('div', { 'data-testid': 'observe-panel-errors' },
+          React.createElement('table', { style: T.table },
+            React.createElement('thead', null, React.createElement('tr', null,
+              React.createElement('th', null, 'tool'), React.createElement('th', null, 'signature'),
+              React.createElement('th', null, 'count'), React.createElement('th', null, 'last'))),
+            React.createElement('tbody', null, errors.slice(0, 50).map((e, i) =>
+              React.createElement('tr', { key: `${e.tool}-${e.signature}-${i}` },
+                React.createElement('td', null, e.tool),
+                React.createElement('td', null, e.signature),
+                React.createElement('td', null, e.count),
+                React.createElement('td', null, new Date(e.lastTs).toLocaleTimeString()))))))
+      } else if (tab === 'latency') {
+        panel = React.createElement('div', { 'data-testid': 'observe-panel-latency' },
+          latency
+            ? React.createElement('p', { style: T.subtle }, `n=${latency.count} · p50 ${latency.p50}ms · p95 ${latency.p95}ms · p99 ${latency.p99}ms`)
+            : React.createElement('p', { style: T.subtle }, 'latency …'))
+      } else {
+        panel = React.createElement('div', { 'data-testid': 'observe-panel-health' },
+          health
+            ? React.createElement('div', null,
+              React.createElement('p', { style: T.subtle },
+                `uptime ${Math.round(health.uptimeMs / 60000)}m · ${health.toolCount} tools · ${health.plugins.length} plugins${health.degraded?.length ? ` · ⚠ degraded ${health.degraded.length}` : ''}`),
+              health.degraded?.length ? React.createElement('ul', { style: { fontSize: 11, fontWeight: 'bold', margin: '4px 0', color: 'var(--dsw-alias-text-primary)' } },
+                health.degraded.map((d, i) => React.createElement('li', { key: `${d.id}-${i}` }, `${d.id}: ${d.error}`))) : null)
+            : React.createElement('p', { style: T.subtle }, 'health …'))
+      }
+
+      return React.createElement('div', { style: T.panel },
+        React.createElement('h3', { style: T.text }, 'Observe'),
+        tabBar,
+        panel)
     }
 
     ctx.effect(() => ctx.slots.inject('settings.section', { id: 'observe', order: 27, label: () => 'Observe', render: Dashboard }))

@@ -28,7 +28,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "build:client": "echo \"no client build\"",
+    "build:client": "esbuild client/index.jsx --bundle --platform=browser --external:react --external:react-dom --outfile=lib/client.js --log-level=warning && test -f lib/client.js",
     "verify": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -52,8 +52,9 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.21.5",
     "typescript": "^5.8.0",
-    "vitest": "^2.0.0",
-    "@types/node": "^22.0.0"
+    "vitest": "^2.0.0"
   }
 }
