@@ -29,37 +29,60 @@ export function normalizeSignature(detail: string): string {
     .replace(/\/[^\s:]+\.(ts|js|mjs|go|py|php)/g, '#')
 }
 
-export function fromSessionEvent(payload: unknown): TraceRecord | null {
-  if (!payload || typeof payload !== 'object') return null
-  const p = payload as any
-  const sessionId = pick<string>(p.session, ['id']) ?? pick<string>(p, ['sessionId', 'id'])
-  const ev = pick<string>(p, ['event', 'kind']) ?? ''
-  if (!sessionId && !ev) return null
-  const tokens = pick<TokenUsage>(p, ['tokens', 'usage']) ?? undefined
-  const kind: TraceRecord['kind'] = /tool/i.test(ev) ? 'tool' : /turn/i.test(ev) ? 'turn' : /step/i.test(ev) ? 'step' : tokens ? 'step' : 'step'
+export function fromSessionEvent(session: unknown, event: unknown): TraceRecord | null {
+  if (!session || typeof session !== 'object' || !event || typeof event !== 'object') return null
+  const s = session as any
+  const e = event as any
+  // Real harness shape: ctx.on('session/event', (session, event) => ...)
+  // with SessionEvent = { type, seq, time, data } and session.id.
+  const sessionId = pick<string>(s, ['id'])
+  const type = pick<string>(e, ['type'])
+  if (!sessionId || !type) return null
+  const data = e.data !== null && typeof e.data === 'object' ? e.data : {}
+  const usage = data.usage !== null && typeof data.usage === 'object' ? data.usage : undefined
+  const tokens: TokenUsage | undefined = usage ? {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+  } : undefined
+  const kind: TraceRecord['kind'] =
+    type === 'turn/end' ? 'turn'
+    : type === 'tool/call' || type === 'tool/result' ? 'tool'
+    : 'step'
+  const isError = type === 'tool/result' && ((data.message !== null && typeof data.message === 'object' && (data.message as any).isError === true) || data.error !== undefined)
   return {
-    ts: pick<number>(p, ['ts', 'timestamp', 'time']) ?? Date.now(),
+    ts: typeof e.time === 'number' && Number.isFinite(e.time) ? e.time : Date.now(),
     kind,
     sessionId,
-    tool: pick<string>(p, ['tool', 'toolName', 'name']),
-    latencyMs: pick<number>(p, ['latencyMs', 'durationMs', 'latency']),
-    isError: pick<boolean>(p, ['isError', 'error']),
+    tool: type === 'tool/call' ? pick<string>(data, ['name']) : undefined,
+    latencyMs: undefined,
+    isError: isError || undefined,
     tokens,
-    detail: pick<string>(p, ['detail', 'message', 'reason']),
-    traceId: pick<string>(p, ['traceId', 'trace_id']),
+    detail: type === 'tool/result' && data.error !== undefined
+      ? `tool error ${(data.error as any)?.name ?? ''} ${(data.error as any)?.code ?? ''}`.trim() || undefined
+      : undefined,
+    traceId: pick<string>(data, ['traceId', 'trace_id']),
   }
 }
 
 export function fromTelemetryRecord(record: unknown): TraceRecord | null {
   if (!record || typeof record !== 'object') return null
   const r = record as any
+  // Real waterfall shape: ctx.waterfall('session-telemetry/record',
+  // { channel, time, severity, attributes, body }, next).
   if (r.severity !== 'error') return null
+  const attrs = r.attributes !== null && typeof r.attributes === 'object' ? r.attributes : {}
+  const body = r.body !== null && typeof r.body === 'object' ? r.body : {}
+  const detail = pick<string>(body, ['message', 'reason', 'detail'])
+    ?? pick<string>(attrs, ['error.name', 'telemetry.op'])
+    ?? 'error'
   return {
-    ts: pick<number>(r, ['ts', 'timestamp', 'time']) ?? Date.now(),
+    ts: typeof r.time === 'number' && Number.isFinite(r.time) ? r.time : Date.now(),
     kind: 'error',
-    sessionId: pick<string>(r, ['sessionId', 'session']),
+    sessionId: pick<string>(attrs, ['session.id']) ?? pick<string>(r, ['sessionId']),
     isError: true,
-    detail: [pick<string>(r, ['reason', 'message', 'detail']), r.channel ? `channel:${r.channel}` : ''].filter(Boolean).join(' ') || 'error',
-    traceId: pick<string>(r, ['traceId', 'trace_id']),
+    detail: [detail, r.channel ? `channel:${r.channel}` : ''].filter(Boolean).join(' ') || 'error',
+    traceId: pick<string>(body, ['traceId', 'trace_id']) ?? pick<string>(attrs, ['trace.id']) ?? pick<string>(r, ['traceId', 'trace_id']),
   }
 }

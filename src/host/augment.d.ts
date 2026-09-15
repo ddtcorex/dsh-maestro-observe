@@ -1,32 +1,22 @@
 import '@deepseek-ai/cordis'
 
+export interface ObserveSessionLike {
+  id?: string
+}
+
 export interface ObserveSessionEventLike {
-  session?: { id?: string }
-  event?: string
-  kind?: string
-  tokens?: any
-  usage?: any
-  tool?: string
-  toolName?: string
-  name?: string
-  latencyMs?: number
-  durationMs?: number
-  isError?: boolean
-  error?: boolean
-  ts?: number
-  timestamp?: number
-  detail?: string
-  message?: string
-  reason?: string
+  type?: string
+  seq?: number
+  time?: number
+  data?: any
 }
 
 export interface ObserveTelemetryRecordLike {
-  severity?: string
   channel?: string
-  reason?: string
-  message?: string
-  ts?: number
-  sessionId?: string
+  time?: number
+  severity?: string
+  attributes?: Record<string, any>
+  body?: any
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -34,7 +24,7 @@ declare module '@deepseek-ai/cordis' {
     startedAt?: number
   }
   interface Events {
-    'session/event'(payload: ObserveSessionEventLike): void
+    'session/event'(session: ObserveSessionLike, event: ObserveSessionEventLike): void
     'session-telemetry/record'(record: ObserveTelemetryRecordLike, next: (r: any) => any): any
   }
 }
