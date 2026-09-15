@@ -176,46 +176,75 @@ export function createObservePlugin(
       ctx.effect(() =>
         (ctx as any).connection.rpc.handle(
           MAESTRO_OBSERVE_CHANNEL,
-          async (req: any) => {
-            const method = req?.method
-            if (method === 'status')
-              return {
-                ok: true,
-                uptimeMs: Date.now() - ((ctx as any).startedAt ?? Date.now()),
-                version: VERSION,
-                ringSize: store.ringSize,
-                historyLines: await store.historyLines(),
-              }
-            if (method === 'trace') {
-              return {
-                ok: true,
-                records: store.trace(req?.limit ?? 50, {
-                  sessionId: req?.sessionId,
-                  tool: req?.tool,
-                  kind: req?.kind,
-                  since: req?.since,
-                }),
-              }
-            }
-            if (method === 'cost') {
-              const scope = req?.scope ?? 'day'
-              if (req?.groupBy === 'tool' || req?.groupBy === 'session') {
-                return { ok: true, groups: store.costGrouped(req.groupBy, req?.since) }
-              }
-              if (scope === 'session' && !req?.sessionId) return { ok: false, error: 'sessionId required' }
-              return { ok: true, cost: scope === 'session' ? store.cost('session', req?.sessionId ?? '') : store.cost('day', req?.day) }
-            }
-            if (method === 'budget') return handleBudget(store, req)
-            if (method === 'config') return handleConfig(store, req)
-            if (method === 'errors') return { ok: true, groups: store.errorsGrouped(req?.tool, req?.since) }
-            if (method === 'latency') return { ok: true, latency: store.latencyPercentiles(req?.tool, req?.since) }
-            if (method === 'health') return { ok: true, health: await buildHealthReport(ctx as any, { listChannels: () => discoverChannels(ctx as any), version: VERSION }) }
-            return { ok: false, error: 'unknown method' }
-          },
+          async (endpoint: string, payload: any) => handleRpc(store, ctx as any, String(endpoint), payload ?? {}),
           { authority: 'loopback' },
         ),
       )
     },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RPC endpoint dispatch for /dsh-maestro-observe (loopback authority).
+// The Connection transport requires the carrier shape
+// ({ ok: true, value } | { ok: false, error: { code, message, details } }) —
+// serverResponseSchema rejects anything else, which makes clients silently
+// fail. Mirrors dsh-maestro-jobs/src/host/rpc.ts.
+// ---------------------------------------------------------------------------
+export type RpcResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: { readonly code: string; readonly message: string; readonly details: object } }
+
+export function rpcOk<T>(value: T): RpcResult<T> {
+  return { ok: true, value }
+}
+
+export function rpcFail(message: string, endpoint: string): RpcResult<never> {
+  return { ok: false, error: { code: `maestro-observe/${endpoint}`, message, details: {} } }
+}
+
+export async function handleRpc(store: ObserveStore, ctx: any, endpoint: string, payload: any): Promise<RpcResult<any>> {
+  const p = payload ?? {}
+  switch (endpoint) {
+    case 'status':
+      return rpcOk({
+        uptimeMs: Date.now() - (ctx?.startedAt ?? Date.now()),
+        version: VERSION,
+        ringSize: store.ringSize,
+        historyLines: await store.historyLines(),
+      })
+    case 'trace':
+      return rpcOk({
+        records: store.trace(p.limit ?? 50, {
+          sessionId: p.sessionId,
+          tool: p.tool,
+          kind: p.kind,
+          since: p.since,
+        }),
+      })
+    case 'cost': {
+      const scope = p.scope ?? 'day'
+      if (p.groupBy === 'tool' || p.groupBy === 'session') {
+        return rpcOk({ groups: store.costGrouped(p.groupBy, p.since) })
+      }
+      if (scope === 'session' && !p.sessionId) return rpcFail('sessionId required', endpoint)
+      return rpcOk({ cost: scope === 'session' ? store.cost('session', p.sessionId ?? '') : store.cost('day', p.day) })
+    }
+    case 'budget':
+    case 'config': {
+      const inner = endpoint === 'budget' ? handleBudget(store, p) : handleConfig(store, p)
+      if (!inner.ok) return rpcFail(typeof inner.error === 'string' ? inner.error : 'invalid request', endpoint)
+      const { ok: _ok, ...value } = inner
+      return rpcOk(value)
+    }
+    case 'errors':
+      return rpcOk({ groups: store.errorsGrouped(p.tool, p.since) })
+    case 'latency':
+      return rpcOk({ latency: store.latencyPercentiles(p.tool, p.since) })
+    case 'health':
+      return rpcOk({ health: await buildHealthReport(ctx as any, { listChannels: () => discoverChannels(ctx as any), version: VERSION }) })
+    default:
+      return rpcFail('unknown endpoint', endpoint)
   }
 }
 

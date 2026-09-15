@@ -6,11 +6,12 @@ Maestro observe — trace/health/cost debug tooling (Phase 3)
 
 Local-first observability for the Maestro plugin stack. The host records
 turn/tool/error signals into a queryable SQLite store
-(`~/.dsh/dsh-maestro-observe/observe.sqlite`, `0600`), exposes them through the
-`maestro-observe` tool and the `/dsh-maestro-observe` loopback RPC, and renders
-a tabbed Settings dashboard (Cost / Errors / Latency / Health) plus a composer
-readout. Telegram digests and spike alerts are delivered through the optional
-`maestroNotifier` service — the plugin works fully without it.
+(`~/.dsh/dsh-maestro-observe/observe.sqlite`, `0600`) and exposes them through
+the `maestro-observe` tool and the `/dsh-maestro-observe` loopback RPC.
+Rendering lives in `dsh-maestro-dashboard` (Activity tab), which calls the RPC
+below — this package ships no client UI. Telegram digests and spike alerts are
+delivered through the optional `maestroNotifier` service — the plugin works
+fully without it.
 
 ## Install
 
@@ -20,8 +21,8 @@ dsh plugin add @ddtcorex/dsh-maestro-observe
 
 ## Tool / RPC ops
 
-Ops are mirrored on the tool (`op`) and the RPC (`method`); unknown ops fail
-closed (`{ ok: false }`).
+Ops are mirrored on the tool (`op`) and the RPC (endpoint name); unknown
+ops/endpoints fail closed.
 
 - `trace { limit?, sessionId?, tool?, kind?, since? }` — newest-first records.
 - `cost { scope: 'day'|'session', sessionId?, day?, groupBy?: 'tool'|'session' }`
@@ -32,6 +33,16 @@ closed (`{ ok: false }`).
 - `latency { tool?, since? }` — `{ count, p50, p95, p99 }` latencyMs.
 - `health {}` — plugins, tool count, per-channel status, deduped degraded list.
 - `status` (RPC only) — uptime, version, ring size, row count.
+
+## RPC calling convention (for dashboard and other consumers)
+
+The Connection transport requires endpoint dispatch plus the carrier shape —
+`rpc.call(channel, endpoint, payload)` returns
+`{ ok: true, value } | { ok: false, error: { code, message, details } }`.
+The server rejects anything else, so clients that send a single `{ method }`
+object or skip the carrier unwrap fail silently. Unwrap with
+`res?.ok ? res.value : null`. Absent observe plugin → call rejects: hide
+dependent UI instead of rendering zeros.
 
 ## Config keys (`config` op)
 
@@ -63,5 +74,4 @@ is local `HH:MM`).
 pnpm verify        # tsc --noEmit
 pnpm test          # vitest run
 pnpm build         # tsc -p tsconfig.json  -> lib/
-pnpm build:client  # esbuild client/index.jsx -> lib/client.js
 ```
