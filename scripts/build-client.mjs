@@ -34,4 +34,7 @@ const wrapped = [
 const outputPath = join(root, 'lib', 'client.js')
 await mkdir(dirname(outputPath), { recursive: true })
 await writeFile(outputPath, wrapped)
+// Minimal types pointer for the "./client" export condition (mirrors the
+// sibling shape { types, default }; the bundle itself is the contract).
+await writeFile(join(root, 'lib', 'client.d.ts'), 'declare const plugin: { apply(ctx: any): void }\nexport default plugin\n')
 console.log(`client bundle written: ${outputPath} (${bundled.length} chars bundled)`)

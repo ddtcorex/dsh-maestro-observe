@@ -60,9 +60,9 @@ describe('observe host plugin', () => {
     const { ctx, rpcHandlers } = fakeCtx()
     const plugin = createObservePlugin(store)
     await plugin.apply(ctx)
-    const res: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'health' })
+    const res: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!('health', {})
     expect(res.ok).toBe(true)
-    expect(res.health.version).toBeTruthy()
+    expect(res.value.health.version).toBeTruthy()
   })
 
   it('rpc unknown method fails closed', async () => {
@@ -70,8 +70,9 @@ describe('observe host plugin', () => {
     const { ctx, rpcHandlers } = fakeCtx()
     const plugin = createObservePlugin(store)
     await plugin.apply(ctx)
-    const res: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'nope' })
+    const res: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!('nope', {})
     expect(res.ok).toBe(false)
+    expect(res.error.code).toContain('maestro-observe')
   })
 
   it('tool schema validates op/limit/scope', async () => {
@@ -90,10 +91,10 @@ describe('observe host plugin', () => {
     const { ctx, rpcHandlers } = fakeCtx()
     const plugin = createObservePlugin(store)
     await plugin.apply(ctx)
-    const res: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'cost', scope: 'session' })
+    const res: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!('cost', { scope: 'session' })
     expect(res.ok).toBe(false)
-    expect(res.error).toMatch(/sessionId/)
-    const res2: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'cost', scope: 'session', sessionId: '' })
+    expect(res.error.message).toMatch(/sessionId/)
+    const res2: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!('cost', { scope: 'session', sessionId: '' })
     expect(res2.ok).toBe(false)
   })
 
@@ -147,9 +148,9 @@ describe('observe host plugin', () => {
     const checkRes: any = await plugin.tool.execute({ op: 'budget', action: 'check', scope: 'day', key: day })
     expect(checkRes.ok).toBe(true)
     expect(checkRes.budget.limit).toBe(100)
-    const rpcRes: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'budget', action: 'check', scope: 'day', key: day })
+    const rpcRes: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!('budget', { action: 'check', scope: 'day', key: day })
     expect(rpcRes.ok).toBe(true)
-    expect(rpcRes.budget.limit).toBe(100)
+    expect(rpcRes.value.budget.limit).toBe(100)
     const bad: any = await plugin.tool.execute({ op: 'budget', action: 'check', scope: 'day' })
     expect(bad.ok).toBe(false)
   })
@@ -163,8 +164,8 @@ describe('observe host plugin', () => {
     expect(setRes.ok).toBe(true)
     const getRes: any = await plugin.tool.execute({ op: 'config', action: 'get', key: 'retention_days' })
     expect(getRes).toEqual({ ok: true, value: '30' })
-    const rpcRes: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'config', action: 'get', key: 'retention_days' })
-    expect(rpcRes).toEqual({ ok: true, value: '30' })
+    const rpcRes: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!('config', { action: 'get', key: 'retention_days' })
+    expect(rpcRes).toEqual({ ok: true, value: { value: '30' } })
     const bad: any = await plugin.tool.execute({ op: 'config', action: 'wipe' })
     expect(bad.ok).toBe(false)
   })
@@ -181,9 +182,10 @@ describe('observe host plugin', () => {
     expect(bySession.ok).toBe(true)
     expect(bySession.records.length).toBe(1)
     expect(bySession.records[0].tool).toBe('bash')
-    const byTool: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'trace', tool: 'web' })
-    expect(byTool.records.length).toBe(1)
-    expect(byTool.records[0].sessionId).toBe('s2')
+    const byTool: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!('trace', { tool: 'web' })
+    expect(byTool.ok).toBe(true)
+    expect(byTool.value.records.length).toBe(1)
+    expect(byTool.value.records[0].sessionId).toBe('s2')
     const byKind: any = await plugin.tool.execute({ op: 'trace', kind: 'error' })
     expect(byKind.records.length).toBe(0)
     const bySince: any = await plugin.tool.execute({ op: 'trace', since: now })
@@ -197,9 +199,9 @@ describe('observe host plugin', () => {
       const def = (await import('../src/host/index.js')).default
       const { ctx, rpcHandlers } = fakeCtx()
       await def.apply(ctx as any) // must not throw: a throw fails the whole tree boot
-      const res: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!({ method: 'status' })
+      const res: any = await rpcHandlers.get(MAESTRO_OBSERVE_CHANNEL)!('status', {})
       expect(res.ok).toBe(true)
-      expect(res.version).toBeTruthy()
+      expect(res.value.version).toBeTruthy()
     } finally {
       if (old === undefined) delete process.env.DSH_HOME
       else process.env.DSH_HOME = old

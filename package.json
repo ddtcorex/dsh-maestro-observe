@@ -17,7 +17,7 @@
   "types": "./lib/index.d.ts",
   "exports": {
     ".": "./lib/index.js",
-    "./client": "./lib/client.js",
+    "./client": { "types": "./lib/client.d.ts", "default": "./lib/client.js" },
     "./package.json": "./package.json"
   },
   "files": [
@@ -40,7 +40,7 @@
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-slots"
       ]
     }

@@ -19,13 +19,23 @@ describe('observe client', () => {
     expect(s).not.toMatch(/#[0-9a-fA-F]{3,6}/)
   })
 
-  test('queries the new RPC ops and guards missing sessionId', () => {
+  test('queries RPC by endpoint with carrier unwrap', () => {
     const s = src()
-    expect(s).toContain(`method: 'errors'`)
-    expect(s).toContain(`method: 'latency'`)
+    expect(s).toContain(`call('errors'`)
+    expect(s).toContain(`call('latency'`)
+    expect(s).toContain(`call('health'`)
+    expect(s).toContain(`call('cost'`)
     expect(s).toContain(`groupBy`)
+    expect(s).toContain('res.ok ? res.value : null')
     // readout must not call session cost without a session id
     expect(s).toMatch(/sessionId\s*\?\s*call|if\s*\(\s*!?sessionId/)
+  })
+
+  test('no emoji-as-icon, aria-live readout', () => {
+    const s = src()
+    expect(s).not.toMatch(/⚠|⚠️/)
+    expect(s).toContain('aria-live')
+    expect(s).toContain('aria-selected')
   })
 
   test('list keys are unique per record', () => {

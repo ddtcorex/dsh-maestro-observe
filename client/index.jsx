@@ -1,13 +1,18 @@
 import * as React from 'react'
 
+export const inject = ['slots', 'connection']
+
 export function apply(ctx) {
-  const slots = ctx.get?.('slots') ?? ctx.slots
+  const slots = ctx.get?.('slots')
   if (!slots) return
-  const connection = ctx.get?.('connection') ?? ctx.connection
+  const connection = ctx.get?.('connection')
   if (!connection) return
   {
     const CHANNEL = '/dsh-maestro-observe'
-    const call = (req) => connection.rpc.call(CHANNEL, req)
+    // Harness RPC: call(channel, endpoint, payload) -> carrier
+    // { ok: true, value } | { ok: false, error }. Unwrap to value|null.
+    const call = (endpoint, payload) => connection.rpc.call(CHANNEL, endpoint, payload ?? {})
+      .then((res) => (res && typeof res === 'object' && 'ok' in res ? (res.ok ? res.value : null) : res))
     const fmt = (n) => (n ?? 0).toLocaleString('en-US')
     const totalOf = (c) => (c ? (c.inputTokens ?? 0) + (c.outputTokens ?? 0) + (c.cacheReadTokens ?? 0) + (c.cacheWriteTokens ?? 0) : 0)
 
@@ -34,10 +39,10 @@ export function apply(ctx) {
       useEffect(() => {
         if (!sessionId) return undefined
         let alive = true
-        const tick = () => call({ method: 'cost', scope: 'session', sessionId }).then((res) => {
+        const tick = () => call('cost', { scope: 'session', sessionId }).then((v) => {
           if (!alive) return
-          if (res?.ok) setCost(res.cost)
-          call({ method: 'trace', limit: 50 }).then((t) => { if (alive) setErrors(t?.ok ? t.records.filter((r) => r.isError).length : 0) }).catch(() => {})
+          if (v) setCost(v.cost)
+          call('trace', { limit: 50 }).then((t) => { if (alive) setErrors(t ? t.records.filter((r) => r.isError).length : 0) }).catch(() => {})
         }).catch(() => {})
         tick()
         const id = setInterval(tick, 30000)
@@ -45,8 +50,11 @@ export function apply(ctx) {
       }, [sessionId])
       if (!sessionId) return null
       const total = totalOf(cost)
-      return React.createElement('span', { style: { fontSize: 12, opacity: 0.7, marginLeft: 8, color: 'var(--dsw-alias-text-secondary)' } },
-        `${cost?.turns ?? 0} turns · ${fmt(total)} tok${errors ? ` · ⚠ ${errors}` : ''}`)
+      const errLabel = errors > 0 ? ` · ${errors} errors` : ''
+      return React.createElement('span', {
+        style: { fontSize: 12, opacity: 0.7, marginLeft: 8, color: 'var(--dsw-alias-text-secondary)' },
+        'aria-live': 'polite',
+      }, `${cost?.turns ?? 0} turns · ${fmt(total)} tok${errLabel}`)
     }
 
     const TABS = [
@@ -70,21 +78,21 @@ export function apply(ctx) {
           try {
             if (tab === 'cost') {
               const [c, g] = await Promise.all([
-                call({ method: 'cost', scope: 'day' }),
-                call({ method: 'cost', scope: 'day', groupBy: 'tool' }),
+                call('cost', { scope: 'day' }),
+                call('cost', { scope: 'day', groupBy: 'tool' }),
               ])
               if (!alive) return
-              if (c?.ok) setCost(c.cost)
-              if (g?.ok) setGroups(g.groups ?? [])
+              if (c) setCost(c.cost)
+              if (g) setGroups(g.groups ?? [])
             } else if (tab === 'errors') {
-              const e = await call({ method: 'errors' })
-              if (alive && e?.ok) setErrors(e.groups ?? [])
+              const e = await call('errors', {})
+              if (alive && e) setErrors(e.groups ?? [])
             } else if (tab === 'latency') {
-              const l = await call({ method: 'latency' })
-              if (alive && l?.ok) setLatency(l.latency)
+              const l = await call('latency', {})
+              if (alive && l) setLatency(l.latency)
             } else {
-              const h = await call({ method: 'health' })
-              if (alive && h?.ok) setHealth(h.health)
+              const h = await call('health', {})
+              if (alive && h) setHealth(h.health)
             }
           } catch { /* keep last good state */ }
         }
@@ -136,7 +144,7 @@ export function apply(ctx) {
           health
             ? React.createElement('div', null,
               React.createElement('p', { style: T.subtle },
-                `uptime ${Math.round(health.uptimeMs / 60000)}m · ${health.toolCount} tools · ${health.plugins.length} plugins${health.degraded?.length ? ` · ⚠ degraded ${health.degraded.length}` : ''}`),
+                `uptime ${Math.round(health.uptimeMs / 60000)}m · ${health.toolCount} tools · ${health.plugins.length} plugins${health.degraded?.length ? ` · degraded ${health.degraded.length}` : ''}`),
               health.degraded?.length ? React.createElement('ul', { style: { fontSize: 11, fontWeight: 'bold', margin: '4px 0', color: 'var(--dsw-alias-text-primary)' } },
                 health.degraded.map((d, i) => React.createElement('li', { key: `${d.id}-${i}` }, `${d.id}: ${d.error}`))) : null)
             : React.createElement('p', { style: T.subtle }, 'health …'))
@@ -167,4 +175,4 @@ export function apply(ctx) {
   }
 }
 
-export default { apply }
+export default { inject, apply }
