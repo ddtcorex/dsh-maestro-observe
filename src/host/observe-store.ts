@@ -249,4 +249,16 @@ export class ObserveStore {
     const row = db.prepare(`SELECT COUNT(*) AS n FROM traces`).get() as { n?: number } | undefined
     return row?.n ?? 0
   }
+
+  purgeBefore(cutoffTs: number): number {
+    this.ring = this.ring.filter((r) => r.ts >= cutoffTs)
+    const db = this.ensureDb()
+    if (!db) return 0
+    const res = db.prepare(`DELETE FROM traces WHERE ts < ?`).run(cutoffTs) as { changes?: number } | undefined
+    return res?.changes ?? 0
+  }
+
+  vacuum(): void {
+    try { this.ensureDb()?.exec('VACUUM') } catch { /* best effort */ }
+  }
 }

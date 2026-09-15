@@ -4,11 +4,24 @@ import z from 'schemastery'
 import { ObserveStore } from './observe-store.js'
 import { fromSessionEvent, fromTelemetryRecord } from './trace-record.js'
 import { buildDigestText, type DigestSnapshot, type NotifierLike } from './digest.js'
+import { purgeOld } from './retention.js'
 import { buildHealthReport } from './health.js'
 
 export const MAESTRO_OBSERVE_CHANNEL = '/dsh-maestro-observe'
 const CHANNELS = ['/dsh-maestro-remote', '/dsh-maestro-review', '/dsh-maestro-govard', '/dsh-maestro-memory', '/dsh-maestro-mobile', '/dsh-maestro-guard', MAESTRO_OBSERVE_CHANNEL]
-export const VERSION: string = createRequire(import.meta.url)('../../package.json').version
+// src/host/index.ts runs two levels below the root, lib/index.js one level:
+// try both so VERSION resolves under vitest (src) and in production (lib).
+function readVersion(): string {
+  const req = createRequire(import.meta.url)
+  for (const p of ['../package.json', '../../package.json']) {
+    try {
+      const v = req(p)?.version
+      if (typeof v === 'string' && v.length > 0) return v
+    } catch { /* try next */ }
+  }
+  return '0.0.0'
+}
+export const VERSION: string = readVersion()
 
 export const toolSchema = z.object({
   op: z.union(['trace', 'health', 'cost', 'budget', 'config', 'errors', 'latency']).required(),
@@ -107,6 +120,12 @@ export function createObservePlugin(
               void runDigestOnce(ctx as any, store, Date.now())
             }
             void runSpikeCheck(ctx as any, store, Date.now())
+            if (store.configGet('last_retention_day') !== todayLocal) {
+              store.configSet('last_retention_day', todayLocal)
+              const days = Number(store.configGet('retention_days') ?? '30')
+              void purgeOld(store, Date.now(), days).catch((e: any) =>
+                (ctx as any).logger?.warn?.('observe: retention purge failed', e?.message))
+            }
           } catch (e: any) {
             ;(ctx as any).logger?.warn?.('observe: digest tick failed', e?.message)
           }
