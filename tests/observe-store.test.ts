@@ -17,6 +17,18 @@ describe('ObserveStore', () => {
     expect(t[0].ts).toBe(204)          // newest first
     expect(t[199].ts).toBe(5)
   })
+  it('backfills tool/result name from the matching tool/call by callId', async () => {
+    const s = new ObserveStore(dir)
+    await s.push({ ts: 1, kind: 'tool', sessionId: 's1', tool: 'bash', callId: 'c1' })
+    await s.push({ ts: 2, kind: 'tool', sessionId: 's1', callId: 'c1', isError: true, detail: 'tool error ExitError 1' })
+    const t = s.trace(10, { kind: 'tool' })
+    expect(t.length).toBe(2)
+    expect(t[0].tool).toBe('bash')     // result inherited the call name
+    expect(t[0].callId).toBe('c1')
+    // No match: stays unnamed rather than guessing.
+    await s.push({ ts: 3, kind: 'tool', sessionId: 's1', callId: 'orphan' })
+    expect(s.trace(10, { kind: 'tool' })[0].tool).toBeUndefined()
+  })
 
   it('aggregates cost per day and per session', async () => {
     const s = new ObserveStore(dir)
