@@ -1,10 +1,13 @@
 import * as React from 'react'
 
-export default {
-  inject: ['connection', 'slots'],
-  apply(ctx) {
+export function apply(ctx) {
+  const slots = ctx.get?.('slots') ?? ctx.slots
+  if (!slots) return
+  const connection = ctx.get?.('connection') ?? ctx.connection
+  if (!connection) return
+  {
     const CHANNEL = '/dsh-maestro-observe'
-    const call = (req) => ctx.connection.rpc.call(CHANNEL, req)
+    const call = (req) => connection.rpc.call(CHANNEL, req)
     const fmt = (n) => (n ?? 0).toLocaleString('en-US')
     const totalOf = (c) => (c ? (c.inputTokens ?? 0) + (c.outputTokens ?? 0) + (c.cacheReadTokens ?? 0) + (c.cacheWriteTokens ?? 0) : 0)
 
@@ -145,7 +148,23 @@ export default {
         panel)
     }
 
-    ctx.effect(() => ctx.slots.inject('settings.section', { id: 'observe', order: 27, label: () => 'Observe', render: Dashboard }))
-    ctx.effect(() => ctx.slots.inject('conversation.composer.dock', { id: 'observe-readout', order: 1, label: () => 'observe', render: Readout }))
-  },
+    ctx.effect(() => {
+      const dispose = slots.inject('settings.section', () =>
+        slots.register(
+          { name: 'settings.section', id: 'observe', order: 27, label: () => 'Observe' },
+          Dashboard,
+        ))
+      return () => { try { dispose?.() } catch {} }
+    })
+    ctx.effect(() => {
+      const dispose = slots.inject('conversation.composer.dock', () =>
+        slots.register(
+          { name: 'conversation.composer.dock', id: 'observe-readout', order: 1, label: () => 'observe' },
+          Readout,
+        ))
+      return () => { try { dispose?.() } catch {} }
+    })
+  }
 }
+
+export default { apply }
