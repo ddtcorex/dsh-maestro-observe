@@ -189,4 +189,23 @@ describe('observe host plugin', () => {
     const bySince: any = await plugin.tool.execute({ op: 'trace', since: now })
     expect(bySince.records.length).toBe(1)
   })
+
+  it('boot_ts refreshes on every boot', async () => {
+    const old = process.env.DSH_HOME
+    process.env.DSH_HOME = dir
+    try {
+      const seed = new ObserveStore(dir)
+      seed.configSet('boot_ts', '1')
+      const def = (await import('../src/host/index.js')).default
+      const { ctx } = fakeCtx()
+      await def.apply(ctx as any)
+      const probe = new ObserveStore(dir)
+      const ts = Number(probe.configGet('boot_ts'))
+      expect(ts).toBeGreaterThan(1000)
+      expect(Date.now() - ts).toBeLessThan(60000)
+    } finally {
+      if (old === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = old
+    }
+  })
 })

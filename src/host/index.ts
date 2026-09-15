@@ -321,7 +321,8 @@ export default {
   async apply(ctx: Context) {
     const store = new ObserveStore()
     await store.load()
-    if (!store.configGet('boot_ts')) store.configSet('boot_ts', String(Date.now()))
+    // Refresh every boot: uptime = since this boot, visible to late readers.
+    store.configSet('boot_ts', String(Date.now()))
     ;(ctx as any).bootTs = Number(store.configGet('boot_ts'))
     return createObservePlugin(store, () => ctx).apply(ctx)
   },
