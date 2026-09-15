@@ -24,7 +24,7 @@ describe('signature', () => {
     expect(a).toBe(b)
   })
   it('traceId passes through telemetry reducer', () => {
-    const r = fromTelemetryRecord({ severity: 'error', channel: 'c', reason: 'x', traceId: 't-1' })
+    const r = fromTelemetryRecord({ severity: 'error', channel: 'c', time: 1, attributes: {}, body: { message: 'x', traceId: 't-1' } })
     expect(r!.traceId).toBe('t-1')
   })
 })

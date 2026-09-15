@@ -116,11 +116,13 @@ export function createObservePlugin(
     tool,
     apply(ctx: Context) {
       ctxRef = ctx
-      // Session events → trace
+      // Session events → trace. Real signature is (session, event) with
+      // SessionEvent = { type, seq, time, data } — the event arg carries
+      // kind/tokens, not the session.
       ctx.effect(() =>
-        ctx.on('session/event', (payload: any) => {
+        ctx.on('session/event', (session: any, event: any) => {
           try {
-            const r = fromSessionEvent(payload)
+            const r = fromSessionEvent(session, event)
             if (r) void store.push(r)
           } catch (e: any) {
             ;(ctx as any).logger?.warn?.('observe: session event skipped', e?.message)
