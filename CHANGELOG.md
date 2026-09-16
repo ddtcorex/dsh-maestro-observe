@@ -6,6 +6,19 @@ All notable changes to this project are documented in this file. Format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-16
+
+### Added
+
+- **HTML daily digest** — the morning Telegram report follows the Maestro
+  notify convention (`<b>🤖 Maestro Observe</b>` header, `<code>` ids,
+  escaped dynamic text): headline splits billable (in + out) from cache
+  reads, previous full UTC day carried for context, tools ranked by call
+  count via a new `ObserveStore.toolCallCounts` query, short session ids,
+  top error signatures with counts, explicit `✅ no errors` all-clear,
+  latency percentiles, and spent/limit over-budget lines; multi-item
+  sections render one-per-line for mobile readability.
+
 ### Removed
 
 - **Settings UI + composer readout** — rendering moved to
