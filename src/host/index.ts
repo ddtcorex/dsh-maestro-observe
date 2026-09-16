@@ -334,15 +334,30 @@ export async function runDigestOnce(
   }
   try {
     // Day windows are UTC midnights, matching cost('day') buckets; the fire
-    // time (digest_schedule) is still local HH:MM.
+    // time (digest_schedule) is still local HH:MM. The morning tick fires at
+    // ~01:00 UTC, so "today" is always partial — carry the previous full UTC
+    // day alongside it for context.
     const dayStart = startOfDayUTC(nowMs)
+    const dayLabel = new Date(dayStart).toISOString().slice(0, 10)
+    const prevLabel = new Date(dayStart - 86_400_000).toISOString().slice(0, 10)
+    const toolAgg = new Map(store.costGrouped('tool', dayStart).map((g) => [g.key, g.agg]))
+    const zeroAgg = (): { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; turns: number } =>
+      ({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, turns: 0 })
+    const latency = store.latencyPercentiles(undefined, dayStart)
     const snapshot: DigestSnapshot = {
+      dayLabel,
       day: store.cost('day'),
-      topTools: topByTotal(store.costGrouped('tool', dayStart), 5),
+      prevDay: { label: prevLabel, agg: store.cost('day', prevLabel) },
+      // Token sums on tool-kind rows are always zero (tokens ride on
+      // turn/step rows with tool unset), so rank tools by call count.
+      topTools: store.toolCallCounts(dayStart).slice(0, 5).map((r) => ({ key: r.tool, calls: r.count, agg: toolAgg.get(r.tool) ?? zeroAgg() })),
       topSessions: topByTotal(store.costGrouped('session', dayStart), 5),
-      overBudget: store.listBudgets()
-        .filter((b) => (b.scope === 'day' || b.scope === 'session') && store.budgetCheck(b.scope, b.key).over)
-        .map((b) => `${b.scope}:${b.key}`),
+      topErrors: store.errorsGrouped(undefined, dayStart).slice(0, 5).map((g) => ({ tool: g.tool, signature: g.signature, count: g.count })),
+      latency: { count: latency.count, p50: latency.p50, p95: latency.p95 },
+      budgets: store.listBudgets().map((b) => {
+        const c = store.budgetCheck(b.scope as 'day' | 'session', b.key)
+        return { scope: b.scope, key: b.key, spent: c.spent, limit: c.limit, over: c.over }
+      }),
       errorCount: store.errorCountSince(dayStart),
     }
     const res = await resolved.notifier.send('telegram', resolved.target, { text: buildDigestText(snapshot) })

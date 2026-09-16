@@ -113,4 +113,18 @@ describe('ObserveStore', () => {
     expect(tools).toContain('r1')
     expect(tools).toContain('r2')
   })
+
+  it('counts tool calls ranked by frequency', async () => {
+    const s = new ObserveStore(dir)
+    const now = Date.now()
+    await s.push({ ts: now, kind: 'tool', tool: 'bash', sessionId: 'c' })
+    await s.push({ ts: now + 1, kind: 'tool', tool: 'edit', sessionId: 'c' })
+    await s.push({ ts: now + 2, kind: 'tool', tool: 'bash', sessionId: 'c' })
+    await s.push({ ts: now + 3, kind: 'turn', sessionId: 'c', tokens: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 } })
+    const counts = s.toolCallCounts(now)
+    expect(counts).toEqual([{ tool: 'bash', count: 2 }, { tool: 'edit', count: 1 }])
+    // Unnamed rows (turn/step with no tool) never appear as tools.
+    expect(counts.some((c) => c.tool === '')).toBe(false)
+    expect(s.toolCallCounts(now + 2)).toEqual([{ tool: 'bash', count: 1 }])
+  })
 })

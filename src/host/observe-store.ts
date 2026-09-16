@@ -210,6 +210,15 @@ export class ObserveStore {
     }))
   }
 
+  toolCallCounts(since?: number): Array<{ tool: string; count: number }> {
+    const db = this.ensureDb()
+    if (!db) return []
+    const rows = db.prepare(
+      `SELECT tool, COUNT(*) AS count FROM traces WHERE ts >= ? AND tool IS NOT NULL GROUP BY tool ORDER BY COUNT(*) DESC`,
+    ).all(since ?? 0) as Array<{ tool: string; count: number }>
+    return rows.map((r) => ({ tool: r.tool, count: r.count }))
+  }
+
   configGet(key: string): string | undefined {
     const db = this.ensureDb()
     if (!db) return undefined
