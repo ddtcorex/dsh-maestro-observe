@@ -88,9 +88,13 @@ function truncate(s: string, n: number): string {
   return `${t.slice(0, n - 1).trimEnd()}…`
 }
 
+function turns(n: number): string {
+  return `${fmt(n)} turn${n === 1 ? '' : 's'}`
+}
+
 function usageLine(agg: CostAggregate): string {
   const parts = [
-    `${fmt(agg.turns)} turns`,
+    turns(agg.turns),
     `${fmt(billed(agg))} billed (in ${fmt(agg.inputTokens)} + out ${fmt(agg.outputTokens)})`,
   ]
   const cached = agg.cacheReadTokens + agg.cacheWriteTokens
@@ -110,7 +114,7 @@ export function buildDigestText(s: DigestSnapshot): string {
     lines.push(`<b>Top tools:</b> ${s.topTools.slice(0, 5).map((t) => `<code>${escapeHtml(t.key)}</code> ×${fmt(t.calls)}`).join(' · ')}`)
   }
   if (s.topSessions.length > 0) {
-    lines.push(`<b>Sessions:</b> ${s.topSessions.slice(0, 5).map((t) => `<code>${escapeHtml(shortId(t.key))}</code> ${fmt(billed(t.agg))} billed (${fmt(t.agg.turns)} turns)`).join(' · ')}`)
+    lines.push(`<b>Sessions:</b> ${s.topSessions.slice(0, 5).map((t) => `<code>${escapeHtml(shortId(t.key))}</code> ${fmt(billed(t.agg))} billed (${turns(t.agg.turns)})`).join(' · ')}`)
   }
   if (s.errorCount > 0) {
     const groups = s.topErrors.slice(0, 5).map((g) => {
