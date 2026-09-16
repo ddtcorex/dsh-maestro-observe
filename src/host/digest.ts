@@ -111,17 +111,19 @@ export function buildDigestText(s: DigestSnapshot): string {
     lines.push(`<b>Yesterday:</b> ${usageLine(s.prevDay.agg)}`)
   }
   if (s.topTools.length > 0) {
-    lines.push(`<b>Top tools:</b> ${s.topTools.slice(0, 5).map((t) => `<code>${escapeHtml(t.key)}</code> ×${fmt(t.calls)}`).join(' · ')}`)
+    const items = s.topTools.slice(0, 5).map((t) => `• <code>${escapeHtml(t.key)}</code> ×${fmt(t.calls)}`)
+    lines.push(`<b>Top tools:</b>\n${items.join('\n')}`)
   }
   if (s.topSessions.length > 0) {
-    lines.push(`<b>Sessions:</b> ${s.topSessions.slice(0, 5).map((t) => `<code>${escapeHtml(shortId(t.key))}</code> ${fmt(billed(t.agg))} billed (${turns(t.agg.turns)})`).join(' · ')}`)
+    const items = s.topSessions.slice(0, 5).map((t) => `• <code>${escapeHtml(shortId(t.key))}</code> ${fmt(billed(t.agg))} billed (${turns(t.agg.turns)})`)
+    lines.push(`<b>Sessions:</b>\n${items.join('\n')}`)
   }
   if (s.errorCount > 0) {
     const groups = s.topErrors.slice(0, 5).map((g) => {
       const tool = g.tool !== '' ? `<code>${escapeHtml(g.tool)}</code> ` : ''
-      return `${tool}${escapeHtml(truncate(g.signature, 120))} ×${fmt(g.count)}`
+      return `• ${tool}${escapeHtml(truncate(g.signature, 120))} ×${fmt(g.count)}`
     })
-    lines.push(`<b>Errors:</b> ${fmt(s.errorCount)}${groups.length > 0 ? ` — ${groups.join(' · ')}` : ''}`)
+    lines.push(`<b>Errors:</b> ${fmt(s.errorCount)}${groups.length > 0 ? `\n${groups.join('\n')}` : ''}`)
   } else {
     lines.push(`✅ no errors`)
   }

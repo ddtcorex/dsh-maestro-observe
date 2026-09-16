@@ -47,7 +47,18 @@ describe('digest text', () => {
 
   it('ranks tools by call count', () => {
     const text = buildDigestText(baseSnapshot())
-    expect(text).toContain('<code>bash</code> ×12')
+    expect(text).toContain('<b>Top tools:</b>\n• <code>bash</code> ×12')
+  })
+
+  it('renders multi-item sections as one-item-per-line listings', () => {
+    const text = buildDigestText(baseSnapshot({
+      topTools: [
+        { key: 'bash', calls: 12, agg: agg() },
+        { key: 'edit', calls: 7, agg: agg() },
+      ],
+    }))
+    expect(text).toContain('<b>Top tools:</b>\n• <code>bash</code> ×12\n• <code>edit</code> ×7')
+    expect(text).toContain('<b>Errors:</b> 2\n• <code>edit</code> tool error FsError FS_STALE_VERSION ×2')
   })
 
   it('shortens session ids', () => {
