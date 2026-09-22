@@ -44,12 +44,26 @@ export function createObservePlugin(
   opts?: { getHealthDeps?: () => any } | (() => any),
 ) {
   let ctxRef: any = null
+  let bootTs: number | undefined
+  // Cordis' context proxy throws `cannot get property "<key>" without inject`
+  // for any key that is not a real service (`vendor/cordis/src/reflect.ts`), so
+  // the health builder must receive a plain object. Reading a service through
+  // the proxy is fine when it exists; an unknown one is swallowed here.
+  const readService = (name: string): any => {
+    try { return ctxRef?.[name] } catch { return undefined }
+  }
+  const liveDeps = (): any => ({
+    bootTs: bootTs ?? Date.now(),
+    registry: readService('registry'),
+    tools: readService('tools'),
+    connection: readService('connection'),
+  })
   const resolveDeps = (): any => {
     if (typeof opts === 'function') return (opts as () => any)()
     if (opts && typeof opts === 'object' && 'getHealthDeps' in opts && typeof (opts as any).getHealthDeps === 'function') {
       return (opts as any).getHealthDeps()
     }
-    return ctxRef ?? {}
+    return liveDeps()
   }
 
   const tool = {
@@ -116,6 +130,7 @@ export function createObservePlugin(
     tool,
     apply(ctx: Context) {
       ctxRef = ctx
+      bootTs ??= Date.now()
       // Session events → trace. Real signature is (session, event) with
       // SessionEvent = { type, seq, time, data } — the event arg carries
       // kind/tokens, not the session.
@@ -176,7 +191,7 @@ export function createObservePlugin(
       ctx.effect(() =>
         (ctx as any).connection.rpc.handle(
           MAESTRO_OBSERVE_CHANNEL,
-          async (endpoint: string, payload: any) => handleRpc(store, ctx as any, String(endpoint), payload ?? {}),
+          async (endpoint: string, payload: any) => handleRpc(store, resolveDeps, String(endpoint), payload ?? {}),
           { authority: 'loopback' },
         ),
       )
@@ -203,12 +218,12 @@ export function rpcFail(message: string, endpoint: string): RpcResult<never> {
   return { ok: false, error: { code: `maestro-observe/${endpoint}`, message, details: {} } }
 }
 
-export async function handleRpc(store: ObserveStore, ctx: any, endpoint: string, payload: any): Promise<RpcResult<any>> {
+export async function handleRpc(store: ObserveStore, getDeps: () => any, endpoint: string, payload: any): Promise<RpcResult<any>> {
   const p = payload ?? {}
   switch (endpoint) {
     case 'status':
       return rpcOk({
-        uptimeMs: Date.now() - (ctx?.startedAt ?? Date.now()),
+        uptimeMs: Date.now() - (getDeps().bootTs ?? Date.now()),
         version: VERSION,
         ringSize: store.ringSize,
         historyLines: await store.historyLines(),
@@ -242,7 +257,7 @@ export async function handleRpc(store: ObserveStore, ctx: any, endpoint: string,
     case 'latency':
       return rpcOk({ latency: store.latencyPercentiles(p.tool, p.since) })
     case 'health':
-      return rpcOk({ health: await buildHealthReport(ctx as any, { listChannels: () => discoverChannels(ctx as any), version: VERSION }) })
+      return rpcOk({ health: await buildHealthReport(getDeps(), { listChannels: () => discoverChannels(getDeps()), version: VERSION }) })
     default:
       return rpcFail('unknown endpoint', endpoint)
   }
@@ -427,8 +442,9 @@ export default {
     const store = new ObserveStore()
     await store.load()
     // NOTE: never stash values on ctx (Cordis throws "cannot set property
-    // without provide" and fails the whole tree boot). Health uptime reads
-    // deps.bootTs (explicit callers) or deps.startedAt (the live ctx).
-    return createObservePlugin(store, () => ctx).apply(ctx)
+    // without provide" and fails the whole tree boot), and never hand the ctx
+    // proxy to the health builder — it reads deps.bootTs, which is not a
+    // service, so Cordis throws "cannot get property … without inject".
+    return createObservePlugin(store).apply(ctx)
   },
 }
