@@ -192,7 +192,6 @@ export function createObservePlugin(
         (ctx as any).connection.rpc.handle(
           MAESTRO_OBSERVE_CHANNEL,
           async (endpoint: string, payload: any) => handleRpc(store, resolveDeps, String(endpoint), payload ?? {}),
-          { authority: 'loopback' },
         ),
       )
     },
@@ -200,7 +199,9 @@ export function createObservePlugin(
 }
 
 // ---------------------------------------------------------------------------
-// RPC endpoint dispatch for /dsh-maestro-observe (loopback authority).
+// RPC endpoint dispatch for /dsh-maestro-observe.
+// Reachability is loopback because the browser dials the local host; it is a
+// transport property, not a registration option — handle() takes (channel, handler).
 // The Connection transport requires the carrier shape
 // ({ ok: true, value } | { ok: false, error: { code, message, details } }) —
 // serverResponseSchema rejects anything else, which makes clients silently
